@@ -1,0 +1,85 @@
+import { request } from 'node:https';
+import type { TelegramApiResponse } from './telegram.types.js';
+
+interface TelegramHttpResponse<T> {
+  statusCode: number;
+  payload: TelegramApiResponse<T>;
+}
+
+export function postTelegram<T>(
+  token: string,
+  method: string,
+  body: Record<string, unknown>,
+): Promise<TelegramHttpResponse<T>> {
+  return postWithRetry(token, method, body);
+}
+
+async function postWithRetry<T>(
+  token: string,
+  method: string,
+  body: Record<string, unknown>,
+): Promise<TelegramHttpResponse<T>> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await postOnce<T>(token, method, body);
+      if (response.statusCode < 500 || attempt === 3) return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 3) throw error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+  }
+
+  throw lastError;
+}
+
+function postOnce<T>(
+  token: string,
+  method: string,
+  body: Record<string, unknown>,
+): Promise<TelegramHttpResponse<T>> {
+  const data = JSON.stringify(body);
+
+  return new Promise((resolve, reject) => {
+    const apiRequest = request(
+      {
+        hostname: 'api.telegram.org',
+        path: `/bot${token}/${method}`,
+        method: 'POST',
+        family: 4,
+        timeout: 8_000,
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(data),
+        },
+      },
+      (response) => {
+        response.setEncoding('utf8');
+        let responseBody = '';
+
+        response.on('data', (chunk: string) => {
+          responseBody += chunk;
+        });
+        response.on('end', () => {
+          try {
+            resolve({
+              statusCode: response.statusCode ?? 502,
+              payload: JSON.parse(responseBody) as TelegramApiResponse<T>,
+            });
+          } catch (error) {
+            reject(error);
+          }
+        });
+      },
+    );
+
+    apiRequest.on('timeout', () => {
+      apiRequest.destroy(new Error('Telegram API request timed out'));
+    });
+    apiRequest.on('error', reject);
+    apiRequest.end(data);
+  });
+}

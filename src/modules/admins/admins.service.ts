@@ -1,0 +1,164 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { UserRole, type User } from '../../generated/prisma/client.js';
+import { AdminsRepository } from './admins.repository.js';
+import type { UpdateAdminDto } from './dto/update-admin.dto.js';
+
+@Injectable()
+export class AdminsService {
+  constructor(private readonly adminsRepository: AdminsRepository) {}
+
+  async me(actorUserId: string) {
+    const user = await this.requireAdmin(actorUserId);
+    return this.present(user);
+  }
+
+  async list(actorUserId: string) {
+    await this.requireSuperAdmin(actorUserId);
+    const users = await this.adminsRepository.listAdmins();
+    return users.map((user) => this.present(user));
+  }
+
+  async getById(actorUserId: string, targetUserId: string) {
+    await this.requireSuperAdmin(actorUserId);
+    return this.present(await this.findAdminTarget(targetUserId));
+  }
+
+  async update(
+    actorUserId: string,
+    targetUserId: string,
+    input: UpdateAdminDto,
+  ) {
+    await this.requireSuperAdmin(actorUserId);
+    const target = await this.findAdminTarget(targetUserId);
+    const data = {
+      ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
+      ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
+      ...(input.username !== undefined ? { username: input.username } : {}),
+    };
+    if (!Object.keys(data).length) {
+      throw new BadRequestException('At least one editable field is required');
+    }
+    return this.present(
+      await this.adminsRepository.updateProfile(target.id, data),
+    );
+  }
+
+  async promote(actorUserId: string, targetUserId: string) {
+    await this.requireSuperAdmin(actorUserId);
+    const target = await this.findTarget(targetUserId);
+    if (target.isBlocked) {
+      throw new BadRequestException('Blocked users cannot be promoted');
+    }
+    if (target.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('A super admin cannot be promoted');
+    }
+    if (target.role === UserRole.ADMIN) {
+      return this.present(target);
+    }
+    if (target.role !== UserRole.CUSTOMER) {
+      throw new BadRequestException('Only customers can be promoted');
+    }
+    return this.present(
+      await this.adminsRepository.setRole(target.id, UserRole.ADMIN),
+    );
+  }
+
+  async demote(actorUserId: string, targetUserId: string) {
+    await this.requireSuperAdmin(actorUserId);
+    if (actorUserId === targetUserId) {
+      throw new ForbiddenException('A super admin cannot demote themselves');
+    }
+    const target = await this.findTarget(targetUserId);
+    if (target.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('A super admin cannot be demoted');
+    }
+    if (target.role !== UserRole.ADMIN) {
+      throw new BadRequestException('Target user is not an admin');
+    }
+    return this.present(
+      await this.adminsRepository.setRole(target.id, UserRole.CUSTOMER),
+    );
+  }
+
+  async block(actorUserId: string, targetUserId: string) {
+    return this.changeBlockedState(actorUserId, targetUserId, true);
+  }
+
+  async unblock(actorUserId: string, targetUserId: string) {
+    return this.changeBlockedState(actorUserId, targetUserId, false);
+  }
+
+  private async changeBlockedState(
+    actorUserId: string,
+    targetUserId: string,
+    isBlocked: boolean,
+  ) {
+    await this.requireSuperAdmin(actorUserId);
+    if (actorUserId === targetUserId) {
+      throw new ForbiddenException('A super admin cannot block themselves');
+    }
+    const target = await this.findTarget(targetUserId);
+    if (target.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('A super admin cannot be blocked');
+    }
+    if (target.role !== UserRole.ADMIN) {
+      throw new BadRequestException('Target user is not an admin');
+    }
+    if (target.isBlocked === isBlocked) return this.present(target);
+    return this.present(
+      await this.adminsRepository.setBlocked(target.id, isBlocked),
+    );
+  }
+
+  private async requireAdmin(id: string): Promise<User> {
+    const user = await this.adminsRepository.findById(id);
+    if (
+      !user ||
+      user.isBlocked ||
+      (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN)
+    ) {
+      throw new ForbiddenException('Admin access is not available');
+    }
+    return user;
+  }
+
+  private async requireSuperAdmin(id: string): Promise<User> {
+    const user = await this.requireAdmin(id);
+    if (user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Super admin role is required');
+    }
+    return user;
+  }
+
+  private async findTarget(id: string): Promise<User> {
+    const user = await this.adminsRepository.findById(id);
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  private async findAdminTarget(id: string): Promise<User> {
+    const user = await this.findTarget(id);
+    if (user.role !== UserRole.ADMIN) {
+      throw new NotFoundException('Admin not found');
+    }
+    return user;
+  }
+
+  private present(user: User) {
+    return {
+      id: user.id,
+      telegramId: user.telegramId.toString(),
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
+      phone: user.phone,
+      role: user.role,
+      isBlocked: user.isBlocked,
+    };
+  }
+}

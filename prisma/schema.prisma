@@ -1,0 +1,158 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  GUEST
+  CUSTOMER
+  ADMIN
+  SUPER_ADMIN
+}
+
+model User {
+  id              String           @id @default(uuid()) @db.Uuid
+  telegramId      BigInt           @unique
+  firstName       String
+  lastName        String?
+  username        String?
+  phone           String?          @unique
+  phoneVerifiedAt DateTime?
+  avatarUrl       String?
+  role            UserRole         @default(GUEST)
+  isBlocked       Boolean          @default(false)
+  lastSeenAt      DateTime?
+  refreshSessions RefreshSession[] @relation("UserRefreshSessions")
+  orders          Order[]          @relation("UserOrders")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([role, lastSeenAt])
+}
+
+model Category {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String    @unique
+  description String?
+  imageUrl    String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+
+  @@index([isActive, sortOrder])
+}
+
+model Product {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  price       Decimal     @db.Decimal(10, 2)
+  imageUrl    String?
+  categoryId  String      @db.Uuid
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  isAvailable Boolean     @default(true)
+  isActive    Boolean     @default(true)
+  orderItems  OrderItem[] @relation("ProductOrderItems")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([categoryId, isActive])
+  @@index([isActive, createdAt])
+}
+
+enum OrderStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum WeekDay {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model Order {
+  id                   String      @id @default(uuid()) @db.Uuid
+  userId               String      @db.Uuid
+  user                 User        @relation("UserOrders", fields: [userId], references: [id], onDelete: Restrict)
+  status               OrderStatus @default(PENDING_CONFIRMATION)
+  phone                String?
+  deliveryAddress      String?
+  latitude             Decimal?    @db.Decimal(9, 6)
+  longitude            Decimal?    @db.Decimal(9, 6)
+  note                 String?
+  subtotal             Decimal     @db.Decimal(10, 2)
+  total                Decimal     @db.Decimal(10, 2)
+  confirmationDeadline DateTime
+  confirmedAt          DateTime?
+  cancelledAt          DateTime?
+  completedAt          DateTime?
+  expiredAt            DateTime?
+  cancelReason         String?
+  items                OrderItem[]
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([confirmationDeadline])
+}
+
+model OrderItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @db.Uuid
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?  @db.Uuid
+  product     Product? @relation("ProductOrderItems", fields: [productId], references: [id], onDelete: SetNull)
+  productName String
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  quantity    Int
+  lineTotal   Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model WorkHour {
+  id        String   @id @default(uuid()) @db.Uuid
+  dayOfWeek WeekDay  @unique
+  isOpen    Boolean  @default(true)
+  openTime  String?
+  closeTime String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dayOfWeek])
+}
+
+model RefreshSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String
+  userId    String    @db.Uuid
+  user      User      @relation("UserRefreshSessions", fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+}
