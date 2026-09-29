@@ -60,9 +60,7 @@ export class CategoriesService {
   async create(dto: CreateCategoryDto): Promise<AdminCategoryResponseDto> {
     const name = normalizeCategoryName(dto.name);
     const slug = this.slugFromName(name);
-    if (
-      await this.categoriesRepository.findDuplicateByNameOrSlug(name, slug)
-    ) {
+    if (await this.categoriesRepository.findDuplicateByNameOrSlug(name, slug)) {
       throw duplicateCategory();
     }
 

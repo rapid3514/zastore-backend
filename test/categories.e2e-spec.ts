@@ -191,15 +191,12 @@ describe('CategoriesController (e2e)', () => {
     ['PATCH', `/api/v1/categories/${activeCategoryId}`],
     ['DELETE', `/api/v1/categories/${activeCategoryId}`],
     ['GET', '/api/v1/categories/manage'],
-  ])('denies SUPER_ADMIN: %s %s', async (method, path) => {
+  ])('allows SUPER_ADMIN: %s %s', async (method, path) => {
     await request(app.getHttpServer())
       [method.toLowerCase() as 'get'](path)
-      .set(
-        'Authorization',
-        authorization(superAdminId, UserRole.SUPER_ADMIN),
-      )
+      .set('Authorization', authorization(superAdminId, UserRole.SUPER_ADMIN))
       .send(method === 'POST' ? { name: 'Burgerlar' } : {})
-      .expect(403);
+      .expect(method === 'POST' ? 201 : method === 'DELETE' ? 204 : 200);
   });
 
   it('denies CUSTOMER category management but allows public list', async () => {

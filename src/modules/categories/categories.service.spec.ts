@@ -27,6 +27,7 @@ describe('CategoriesService', () => {
     findActiveById: vi.fn(),
     findById: vi.fn(),
     findBySlug: vi.fn(),
+    countProducts: vi.fn(),
     findDuplicateByNameOrSlug: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
@@ -37,6 +38,7 @@ describe('CategoriesService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    repository.countProducts.mockResolvedValue(0);
     service = new CategoriesService(repository as never);
   });
 
@@ -97,7 +99,10 @@ describe('CategoriesService', () => {
     repository.findById.mockResolvedValue(category());
     repository.findDuplicateByNameOrSlug.mockResolvedValue(null);
     repository.update.mockResolvedValue(
-      category({ name: 'Burger va Sendvichlar', slug: 'burger-va-sendvichlar' }),
+      category({
+        name: 'Burger va Sendvichlar',
+        slug: 'burger-va-sendvichlar',
+      }),
     );
 
     await service.update(categoryId, { name: 'Burger va Sendvichlar' });
@@ -176,6 +181,16 @@ describe('CategoriesService', () => {
     await expect(service.remove(categoryId)).rejects.toBeInstanceOf(
       ConflictException,
     );
+  });
+
+  it('checks linked products before attempting category deletion', async () => {
+    repository.findById.mockResolvedValue(category());
+    repository.countProducts.mockResolvedValue(1);
+
+    await expect(service.remove(categoryId)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(repository.delete).not.toHaveBeenCalled();
   });
 
   it('maps a unique-constraint race to 409', async () => {

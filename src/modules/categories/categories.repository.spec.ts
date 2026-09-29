@@ -28,4 +28,16 @@ describe('CategoriesRepository', () => {
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
   });
+
+  it('counts linked products before deletion', async () => {
+    const count = vi.fn().mockResolvedValue(2);
+    const repository = new CategoriesRepository({
+      product: { count },
+    } as never);
+
+    await expect(repository.countProducts('category-1')).resolves.toBe(2);
+    expect(count).toHaveBeenCalledWith({
+      where: { categoryId: 'category-1' },
+    });
+  });
 });

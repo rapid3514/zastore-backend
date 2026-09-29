@@ -42,6 +42,12 @@ const blockedUser = () =>
     message: 'Foydalanuvchi bloklangan',
   });
 
+const orderStatusChanged = () =>
+  new BadRequestException({
+    error: 'ORDER_STATUS_CHANGED',
+    message: 'Buyurtma holati boshqa so‘rov tomonidan o‘zgartirilgan',
+  });
+
 export const ORDER_CONFIRMATION_MINUTES = 240;
 
 @Injectable()
@@ -197,7 +203,7 @@ export class OrdersService {
 
     const now = new Date();
     if (current.confirmationDeadline <= now) {
-      await this.ordersRepository.updateStatus(id, {
+      await this.updateStatusAtomically(id, current.status, {
         status: OrderStatus.EXPIRED,
         expiredAt: now,
       });
@@ -218,7 +224,7 @@ export class OrdersService {
     }
 
     return this.toResponse(
-      await this.ordersRepository.updateStatus(id, {
+      await this.updateStatusAtomically(id, current.status, {
         status: OrderStatus.CONFIRMED,
         confirmedAt: now,
       }),
@@ -237,7 +243,7 @@ export class OrdersService {
     }
 
     return this.toResponse(
-      await this.ordersRepository.updateStatus(id, {
+      await this.updateStatusAtomically(id, current.status, {
         status: OrderStatus.CANCELLED,
         cancelledAt: new Date(),
         cancelReason: reason ?? null,
@@ -258,7 +264,7 @@ export class OrdersService {
     if (status === OrderStatus.EXPIRED) update.expiredAt = new Date();
 
     return this.toResponse(
-      await this.ordersRepository.updateStatus(id, update),
+      await this.updateStatusAtomically(id, current.status, update),
     );
   }
 
@@ -273,7 +279,7 @@ export class OrdersService {
     }
 
     return this.toResponse(
-      await this.ordersRepository.updateStatus(id, {
+      await this.updateStatusAtomically(id, order.status, {
         status: OrderStatus.CANCELLED,
         cancelledAt: new Date(),
         cancelReason: reason ?? null,
@@ -361,6 +367,28 @@ export class OrdersService {
         message: `Noto'g'ri status o'zgarishi: ${current} -> ${next}`,
       });
     }
+  }
+
+  private async updateStatusAtomically(
+    id: string,
+    currentStatus: OrderStatus,
+    data: Prisma.OrderUpdateInput,
+  ) {
+    try {
+      return await this.ordersRepository.updateStatus(id, currentStatus, data);
+    } catch (error) {
+      if (this.isPrismaError(error, 'P2025')) throw orderStatusChanged();
+      throw error;
+    }
+  }
+
+  private isPrismaError(error: unknown, code: string): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === code
+    );
   }
 
   private toResponse(order: {

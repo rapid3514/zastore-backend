@@ -115,17 +115,17 @@ export class ProductsService {
     const product = await this.productsRepository.findById(id);
     if (!product) throw productNotFound();
 
-    if ((await this.productsRepository.countOrderItems(id)) > 0) {
-      if (product.isActive || product.isAvailable) {
-        await this.productsRepository.update(id, {
-          isActive: false,
-          isAvailable: false,
-        });
-      }
-      return;
-    }
-
     try {
+      if ((await this.productsRepository.countOrderItems(id)) > 0) {
+        if (product.isActive || product.isAvailable) {
+          await this.productsRepository.update(id, {
+            isActive: false,
+            isAvailable: false,
+          });
+        }
+        return;
+      }
+
       await this.productsRepository.delete(id);
     } catch (error) {
       if (this.isPrismaError(error, 'P2025')) throw productNotFound();

@@ -135,6 +135,10 @@ describe('OrdersService', () => {
         ],
       }),
     );
+    expect(workHoursService.calculateBusinessDeadline).toHaveBeenCalledWith(
+      expect.any(Date),
+      240,
+    );
   });
 
   it('expires an overdue order instead of confirming it', async () => {
@@ -150,6 +154,7 @@ describe('OrdersService', () => {
     });
     expect(repository.updateStatus).toHaveBeenCalledWith(
       orderId,
+      OrderStatus.PENDING_CONFIRMATION,
       expect.objectContaining({ status: OrderStatus.EXPIRED }),
     );
   });
@@ -183,6 +188,7 @@ describe('OrdersService', () => {
     });
     expect(repository.updateStatus).toHaveBeenCalledWith(
       orderId,
+      OrderStatus.PENDING_CONFIRMATION,
       expect.objectContaining({ status: OrderStatus.CONFIRMED }),
     );
   });
@@ -197,6 +203,7 @@ describe('OrdersService', () => {
 
     expect(repository.updateStatus).toHaveBeenCalledWith(
       orderId,
+      OrderStatus.PENDING_CONFIRMATION,
       expect.objectContaining({
         status: OrderStatus.CANCELLED,
         cancelReason: 'Mahsulot qolmagan',
@@ -212,5 +219,40 @@ describe('OrdersService', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(repository.findManageOrders).not.toHaveBeenCalled();
+  });
+
+  it('scopes customer detail lookup to the authenticated owner', async () => {
+    repository.findUserOrderById.mockResolvedValueOnce(order());
+    await expect(
+      service.getMyOrder({ sub: userId }, orderId),
+    ).resolves.toMatchObject({ id: orderId });
+    expect(repository.findUserOrderById).toHaveBeenCalledWith(userId, orderId);
+
+    repository.findUserOrderById.mockResolvedValueOnce(null);
+    await expect(
+      service.getMyOrder({ sub: 'another-user' }, orderId),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('rejects invalid and concurrently changed status transitions', async () => {
+    repository.findById.mockResolvedValueOnce(
+      order({ status: OrderStatus.CONFIRMED }),
+    );
+    await expect(
+      service.updateOrderStatus(orderId, OrderStatus.COMPLETED),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        error: 'INVALID_ORDER_STATUS_TRANSITION',
+      }),
+    });
+    expect(repository.updateStatus).not.toHaveBeenCalled();
+
+    repository.findById.mockResolvedValueOnce(order());
+    repository.updateStatus.mockRejectedValueOnce({ code: 'P2025' });
+    await expect(
+      service.updateOrderStatus(orderId, OrderStatus.CANCELLED),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ error: 'ORDER_STATUS_CHANGED' }),
+    });
   });
 });

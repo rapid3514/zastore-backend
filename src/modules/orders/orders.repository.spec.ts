@@ -1,3 +1,4 @@
+import { OrderStatus, Prisma } from '../../generated/prisma/client.js';
 import { describe, expect, it, vi } from 'vitest';
 import { OrdersRepository } from './orders.repository.js';
 
@@ -95,5 +96,66 @@ describe('OrdersRepository', () => {
     expect(prisma.user.count).toHaveBeenCalledWith({
       where: { orders: { some: {} } },
     });
+  });
+
+  it('creates orders and nested items inside a transaction and propagates rollback errors', async () => {
+    const transactionError = new Error('item creation failed');
+    const create = vi.fn().mockRejectedValue(transactionError);
+    const transaction = vi.fn(async (callback) =>
+      callback({ order: { create } }),
+    );
+    const repository = new OrdersRepository({
+      $transaction: transaction,
+    } as never);
+
+    await expect(
+      repository.createOrder({
+        userId: '11111111-1111-4111-8111-111111111111',
+        status: OrderStatus.PENDING_CONFIRMATION,
+        phone: null,
+        deliveryAddress: null,
+        latitude: null,
+        longitude: null,
+        note: null,
+        subtotal: new Prisma.Decimal('10.00'),
+        total: new Prisma.Decimal('10.00'),
+        confirmationDeadline: new Date('2026-09-29T16:00:00.000Z'),
+        items: [
+          {
+            productId: '22222222-2222-4222-8222-222222222222',
+            productName: 'Burger',
+            unitPrice: new Prisma.Decimal('10.00'),
+            quantity: 1,
+            lineTotal: new Prisma.Decimal('10.00'),
+          },
+        ],
+      }),
+    ).rejects.toBe(transactionError);
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          items: { createMany: { data: [expect.any(Object)] } },
+        }),
+      }),
+    );
+  });
+
+  it('updates status only when the persisted status still matches', async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const repository = new OrdersRepository({ order: { update } } as never);
+
+    await repository.updateStatus('order-1', OrderStatus.PENDING_CONFIRMATION, {
+      status: OrderStatus.CONFIRMED,
+    });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'order-1',
+          status: OrderStatus.PENDING_CONFIRMATION,
+        },
+      }),
+    );
   });
 });

@@ -47,6 +47,7 @@ describe('ProductsController (e2e)', () => {
   const usersService = { findById: vi.fn() };
   const repository = {
     findCategoryById: vi.fn(),
+    countOrderItems: vi.fn(),
     list: vi.fn(),
     findPublicById: vi.fn(),
     findById: vi.fn(),
@@ -92,7 +93,11 @@ describe('ProductsController (e2e)', () => {
       role: UserRole.ADMIN,
       isBlocked: false,
     });
-    repository.findCategoryById.mockResolvedValue({ id: categoryId });
+    repository.findCategoryById.mockResolvedValue({
+      id: categoryId,
+      isActive: true,
+    });
+    repository.countOrderItems.mockResolvedValue(0);
     repository.list.mockResolvedValue({ data: [product], total: 1 });
     repository.findPublicById.mockResolvedValue(product);
     repository.findById.mockResolvedValue(product);
@@ -206,6 +211,28 @@ describe('ProductsController (e2e)', () => {
       .expect(400);
   });
 
+  it('rejects create and category changes targeting an inactive category', async () => {
+    const authorization = `Bearer ${token(UserRole.ADMIN)}`;
+    repository.findCategoryById.mockResolvedValue({
+      id: categoryId,
+      isActive: false,
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/products')
+      .set('Authorization', authorization)
+      .send(createInput)
+      .expect(400);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/products/${productId}`)
+      .set('Authorization', authorization)
+      .send({ categoryId })
+      .expect(400);
+
+    expect(repository.create).not.toHaveBeenCalled();
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
   it('lets ADMIN update availability and delete a product', async () => {
     const authorization = `Bearer ${token(UserRole.ADMIN)}`;
     const response = await request(app.getHttpServer())
@@ -223,6 +250,21 @@ describe('ProductsController (e2e)', () => {
       .set('Authorization', authorization)
       .expect(204);
     expect(repository.delete).toHaveBeenCalledWith(productId);
+  });
+
+  it('soft-deletes a product referenced by historical orders', async () => {
+    repository.countOrderItems.mockResolvedValue(1);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/products/${productId}`)
+      .set('Authorization', `Bearer ${token(UserRole.ADMIN)}`)
+      .expect(204);
+
+    expect(repository.update).toHaveBeenCalledWith(productId, {
+      isActive: false,
+      isAvailable: false,
+    });
+    expect(repository.delete).not.toHaveBeenCalled();
   });
 
   it('lets ADMIN list inactive products through manage', async () => {

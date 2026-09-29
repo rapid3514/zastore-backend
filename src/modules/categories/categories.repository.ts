@@ -41,16 +41,9 @@ export class CategoriesRepository {
     return this.prisma.product.count({ where: { categoryId: id } });
   }
 
-  findDuplicateByNameOrSlug(
-    name: string,
-    slug: string,
-    excludeId?: string,
-  ) {
+  findDuplicateByNameOrSlug(name: string, slug: string, excludeId?: string) {
     const where: Prisma.CategoryWhereInput = {
-      OR: [
-        { slug },
-        { name: { equals: name, mode: 'insensitive' } },
-      ],
+      OR: [{ slug }, { name: { equals: name, mode: 'insensitive' } }],
       ...(excludeId ? { id: { not: excludeId } } : {}),
     };
     return this.prisma.category.findFirst({ where });

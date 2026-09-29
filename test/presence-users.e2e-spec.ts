@@ -31,10 +31,15 @@ describe('presence and role-scoped user management (e2e)', () => {
   let app: INestApplication;
   let jwtService: JwtService;
   let databaseRole = UserRole.CUSTOMER;
+  let databaseBlocked = false;
   const lastSeenAt = new Date(Date.now() - 30_000);
   const repository = {
     findById: vi.fn(() =>
-      Promise.resolve({ id: userId, role: databaseRole, isBlocked: false }),
+      Promise.resolve({
+        id: userId,
+        role: databaseRole,
+        isBlocked: databaseBlocked,
+      }),
     ),
     updateLastSeen: vi.fn(() => Promise.resolve({ id: userId })),
     list: vi.fn(() =>
@@ -109,6 +114,7 @@ describe('presence and role-scoped user management (e2e)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     databaseRole = UserRole.CUSTOMER;
+    databaseBlocked = false;
   });
 
   afterAll(async () => app.close());
@@ -136,6 +142,23 @@ describe('presence and role-scoped user management (e2e)', () => {
       );
     },
   );
+
+  it('rejects GUEST and blocked-user presence updates', async () => {
+    databaseRole = UserRole.GUEST;
+    await request(app.getHttpServer())
+      .post('/api/v1/presence/ping')
+      .set('Authorization', authorization(UserRole.GUEST))
+      .expect(403);
+
+    databaseRole = UserRole.CUSTOMER;
+    databaseBlocked = true;
+    await request(app.getHttpServer())
+      .post('/api/v1/presence/ping')
+      .set('Authorization', authorization(UserRole.CUSTOMER))
+      .expect(403);
+
+    expect(repository.updateLastSeen).not.toHaveBeenCalled();
+  });
 
   it('lets SUPER_ADMIN list all users with computed presence', async () => {
     databaseRole = UserRole.SUPER_ADMIN;

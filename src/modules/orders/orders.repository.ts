@@ -237,9 +237,13 @@ export class OrdersRepository {
     });
   }
 
-  updateStatus(id: string, data: Prisma.OrderUpdateInput) {
+  updateStatus(
+    id: string,
+    currentStatus: OrderStatus,
+    data: Prisma.OrderUpdateInput,
+  ) {
     return this.prisma.order.update({
-      where: { id },
+      where: { id, status: currentStatus },
       data,
       include: orderInclude,
     });

@@ -49,4 +49,16 @@ describe('ProductsRepository.list', () => {
       isAvailable: false,
     });
   });
+
+  it('counts historical order references before deletion', async () => {
+    const count = vi.fn().mockResolvedValue(1);
+    const repository = new ProductsRepository({
+      orderItem: { count },
+    } as never);
+
+    await expect(repository.countOrderItems('product-1')).resolves.toBe(1);
+    expect(count).toHaveBeenCalledWith({
+      where: { productId: 'product-1' },
+    });
+  });
 });
