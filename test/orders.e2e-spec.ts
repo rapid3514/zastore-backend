@@ -136,6 +136,29 @@ describe('OrdersController (e2e)', () => {
       .expect(400);
   });
 
+  it('rejects an empty cart, negative quantity, and client-supplied prices', async () => {
+    const authorization = `Bearer ${token(UserRole.CUSTOMER)}`;
+    await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Authorization', authorization)
+      .send({ items: [] })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Authorization', authorization)
+      .send({ items: [{ productId, quantity: -1 }] })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Authorization', authorization)
+      .send({
+        items: [{ productId, quantity: 1, price: 1 }],
+        totalAmount: 1,
+      })
+      .expect(400);
+    expect(ordersService.createOrder).not.toHaveBeenCalled();
+  });
+
   it('rejects customer access to admin manage endpoints', async () => {
     await request(app.getHttpServer())
       .get('/api/v1/orders/manage')
@@ -189,6 +212,7 @@ describe('OrdersController (e2e)', () => {
     expect(ordersService.rejectOrder).toHaveBeenCalledWith(
       orderId,
       'Mahsulot qolmagan',
+      customerId,
     );
   });
 

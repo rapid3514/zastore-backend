@@ -6,9 +6,14 @@ import { UsersModule } from '../users/users.module.js';
 import { CategoriesController } from './categories.controller.js';
 import { CategoriesRepository } from './categories.repository.js';
 import { CategoriesService } from './categories.service.js';
+import { AuditModule } from '../audit/audit.module.js';
 
 @Module({
-  imports: [UsersModule, PassportModule.register({ defaultStrategy: 'jwt' })],
+  imports: [
+    UsersModule,
+    AuditModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+  ],
   controllers: [CategoriesController],
   providers: [
     CategoriesRepository,

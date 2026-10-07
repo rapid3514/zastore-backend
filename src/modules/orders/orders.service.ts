@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '../../generated/prisma/client.js';
@@ -11,6 +12,9 @@ import { ORDER_STATUS_TRANSITIONS } from './constants/order-status-transitions.j
 import type { CreateOrderDto } from './dto/create-order.dto.js';
 import type { QueryOrdersDto } from './dto/query-orders.dto.js';
 import { OrdersRepository } from './orders.repository.js';
+import { AuditAction, AuditEntityType } from '../../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 const orderNotFound = () =>
   new NotFoundException({
@@ -52,10 +56,14 @@ export const ORDER_CONFIRMATION_MINUTES = 240;
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private readonly ordersRepository: OrdersRepository,
     private readonly usersService: UsersService,
     private readonly workHoursService: WorkHoursService,
+    private readonly auditService?: AuditService,
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   async createOrder(actor: { sub: string }, dto: CreateOrderDto) {
@@ -104,6 +112,7 @@ export class OrdersService {
       status: OrderStatus.PENDING_CONFIRMATION,
       phone,
       deliveryAddress: dto.deliveryAddress ?? null,
+      btcPostBranchNumber: dto.btcPostBranchNumber ?? null,
       latitude:
         dto.latitude !== undefined
           ? new Prisma.Decimal(dto.latitude.toString())
@@ -126,6 +135,10 @@ export class OrdersService {
         lineTotal: new Prisma.Decimal(item.lineTotal.toString()),
       })),
     });
+
+    await this.notifySafely(() =>
+      this.notificationsService?.notifyNewOrder(order),
+    );
 
     return this.toResponse(order);
   }
@@ -196,7 +209,7 @@ export class OrdersService {
     return this.toResponse(order);
   }
 
-  async confirmOrder(id: string) {
+  async confirmOrder(id: string, actorUserId?: string) {
     const current = await this.ordersRepository.findById(id);
     if (!current) throw orderNotFound();
     this.ensureStatusTransition(current.status, OrderStatus.CONFIRMED);
@@ -223,15 +236,26 @@ export class OrdersService {
       });
     }
 
-    return this.toResponse(
-      await this.updateStatusAtomically(id, current.status, {
-        status: OrderStatus.CONFIRMED,
-        confirmedAt: now,
-      }),
+    const updated = await this.updateStatusAtomically(id, current.status, {
+      status: OrderStatus.CONFIRMED,
+      confirmedAt: now,
+    });
+    if (actorUserId) {
+      await this.auditService?.log({
+        actorUserId,
+        action: AuditAction.ORDER_CONFIRM,
+        entityType: AuditEntityType.ORDER,
+        entityId: id,
+        metadata: { from: current.status, to: OrderStatus.CONFIRMED },
+      });
+    }
+    await this.notifySafely(() =>
+      this.notificationsService?.notifyOrderConfirmed(updated),
     );
+    return this.toResponse(updated);
   }
 
-  async rejectOrder(id: string, reason?: string) {
+  async rejectOrder(id: string, reason?: string, actorUserId?: string) {
     const current = await this.ordersRepository.findById(id);
     if (!current) throw orderNotFound();
     if (current.status !== OrderStatus.PENDING_CONFIRMATION) {
@@ -242,17 +266,34 @@ export class OrdersService {
       });
     }
 
-    return this.toResponse(
-      await this.updateStatusAtomically(id, current.status, {
-        status: OrderStatus.CANCELLED,
-        cancelledAt: new Date(),
-        cancelReason: reason ?? null,
-      }),
+    const updated = await this.updateStatusAtomically(id, current.status, {
+      status: OrderStatus.CANCELLED,
+      cancelledAt: new Date(),
+      cancelReason: reason ?? null,
+    });
+    if (actorUserId) {
+      await this.auditService?.log({
+        actorUserId,
+        action: AuditAction.ORDER_REJECT,
+        entityType: AuditEntityType.ORDER,
+        entityId: id,
+        metadata: { from: current.status, to: OrderStatus.CANCELLED, reason },
+      });
+    }
+    await this.notifySafely(() =>
+      this.notificationsService?.notifyOrderRejected(updated),
     );
+    return this.toResponse(updated);
   }
 
-  async updateOrderStatus(id: string, status: OrderStatus) {
-    if (status === OrderStatus.CONFIRMED) return this.confirmOrder(id);
+  async updateOrderStatus(
+    id: string,
+    status: OrderStatus,
+    actorUserId?: string,
+  ) {
+    if (status === OrderStatus.CONFIRMED) {
+      return this.confirmOrder(id, actorUserId);
+    }
 
     const current = await this.ordersRepository.findById(id);
     if (!current) throw orderNotFound();
@@ -263,9 +304,24 @@ export class OrdersService {
     if (status === OrderStatus.COMPLETED) update.completedAt = new Date();
     if (status === OrderStatus.EXPIRED) update.expiredAt = new Date();
 
-    return this.toResponse(
-      await this.updateStatusAtomically(id, current.status, update),
+    const updated = await this.updateStatusAtomically(
+      id,
+      current.status,
+      update,
     );
+    if (actorUserId) {
+      await this.auditService?.log({
+        actorUserId,
+        action: AuditAction.ORDER_STATUS_CHANGE,
+        entityType: AuditEntityType.ORDER,
+        entityId: id,
+        metadata: { from: current.status, to: status },
+      });
+    }
+    await this.notifySafely(() =>
+      this.notificationsService?.notifyOrderStatusChanged(updated),
+    );
+    return this.toResponse(updated);
   }
 
   async cancelMyOrder(actor: { sub: string }, id: string, reason?: string) {
@@ -391,6 +447,16 @@ export class OrdersService {
     );
   }
 
+  private async notifySafely(
+    operation: () => Promise<void> | undefined,
+  ): Promise<void> {
+    try {
+      await operation();
+    } catch {
+      this.logger.error('Order notification failed after business operation');
+    }
+  }
+
   private toResponse(order: {
     id: string;
     status: OrderStatus;
@@ -414,6 +480,7 @@ export class OrdersService {
     total: Prisma.Decimal | string | number;
     phone: string | null;
     deliveryAddress: string | null;
+    btcPostBranchNumber: string | null;
     latitude: Prisma.Decimal | string | number | null;
     longitude: Prisma.Decimal | string | number | null;
     note: string | null;
@@ -448,6 +515,7 @@ export class OrdersService {
       total: new Prisma.Decimal(order.total.toString()).toFixed(2),
       phone: order.phone,
       deliveryAddress: order.deliveryAddress,
+      btcPostBranchNumber: order.btcPostBranchNumber,
       latitude: order.latitude
         ? new Prisma.Decimal(order.latitude.toString()).toFixed(6)
         : null,

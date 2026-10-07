@@ -1,5 +1,10 @@
+import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import { WeekDay } from '../../generated/prisma/client.js';
+import {
+  AuditAction,
+  AuditEntityType,
+  WeekDay,
+} from '../../generated/prisma/client.js';
 import type { WorkHourScheduleEntry } from './work-hours.repository.js';
 import { WorkHoursService } from './work-hours.service.js';
 
@@ -61,6 +66,73 @@ function serviceWithSchedule(
 }
 
 describe('WorkHoursService', () => {
+  it('rejects an opening time that is not before closing time', async () => {
+    const service = serviceWithSchedule();
+
+    await expect(
+      service.updateSchedule([
+        {
+          dayOfWeek: WeekDay.MONDAY,
+          isOpen: true,
+          openTime: '18:00',
+          closeTime: '09:00',
+        },
+      ]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('normalizes a closed day without opening times', async () => {
+    const repo = {
+      findSchedule: vi.fn().mockResolvedValue(schedule),
+      createDefaultSchedule: vi.fn(),
+      upsertMany: vi.fn().mockResolvedValue([]),
+    };
+    const service = new WorkHoursService(
+      repo as never,
+      { getOrThrow: () => 'Asia/Tashkent' } as never,
+    );
+
+    await service.updateSchedule([
+      { dayOfWeek: WeekDay.SUNDAY, isOpen: false },
+    ]);
+
+    expect(repo.upsertMany).toHaveBeenCalledWith([
+      {
+        dayOfWeek: WeekDay.SUNDAY,
+        isOpen: false,
+        openTime: null,
+        closeTime: null,
+      },
+    ]);
+  });
+
+  it('writes a work-hours audit event after persistence', async () => {
+    const repo = {
+      findSchedule: vi.fn().mockResolvedValue(schedule),
+      createDefaultSchedule: vi.fn(),
+      upsertMany: vi.fn().mockResolvedValue([]),
+    };
+    const audit = { log: vi.fn().mockResolvedValue(undefined) };
+    const service = new WorkHoursService(
+      repo as never,
+      { getOrThrow: () => 'Asia/Tashkent' } as never,
+      audit as never,
+    );
+
+    await service.updateSchedule(
+      [{ dayOfWeek: WeekDay.SUNDAY, isOpen: false }],
+      'actor-id',
+    );
+
+    expect(audit.log).toHaveBeenCalledWith({
+      actorUserId: 'actor-id',
+      action: AuditAction.WORK_HOURS_UPDATE,
+      entityType: AuditEntityType.WORK_HOURS,
+      entityId: 'schedule',
+      metadata: { days: [WeekDay.SUNDAY] },
+    });
+  });
+
   it('calculates a deadline using business hours only', async () => {
     const service = serviceWithSchedule();
     const deadline = await service.calculateBusinessDeadline(
@@ -113,10 +185,7 @@ describe('WorkHoursService', () => {
         ? { ...entry, isOpen: true, openTime: '09:00', closeTime: '12:03' }
         : entry,
     );
-    const service = serviceWithSchedule(
-      sundayUntilNoon,
-      'America/Los_Angeles',
-    );
+    const service = serviceWithSchedule(sundayUntilNoon, 'America/Los_Angeles');
 
     const status = await service.getCurrentStatus(
       new Date('2026-09-27T10:05:00-07:00'),

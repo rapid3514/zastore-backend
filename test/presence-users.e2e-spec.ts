@@ -143,6 +143,13 @@ describe('presence and role-scoped user management (e2e)', () => {
     },
   );
 
+  it('returns 401 for an unauthenticated presence ping', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/presence/ping')
+      .expect(401);
+    expect(repository.updateLastSeen).not.toHaveBeenCalled();
+  });
+
   it('rejects GUEST and blocked-user presence updates', async () => {
     databaseRole = UserRole.GUEST;
     await request(app.getHttpServer())

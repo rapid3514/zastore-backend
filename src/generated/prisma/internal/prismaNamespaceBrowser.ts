@@ -54,7 +54,11 @@ export const ModelName = {
   User: 'User',
   Category: 'Category',
   Product: 'Product',
+  ProductMedia: 'ProductMedia',
+  ProductTelegramMessage: 'ProductTelegramMessage',
   Order: 'Order',
+  Payment: 'Payment',
+  AuditLog: 'AuditLog',
   OrderItem: 'OrderItem',
   WorkHour: 'WorkHour',
   RefreshSession: 'RefreshSession'
@@ -116,14 +120,48 @@ export const ProductScalarFieldEnum = {
   description: 'description',
   price: 'price',
   imageUrl: 'imageUrl',
+  imageFileId: 'imageFileId',
   categoryId: 'categoryId',
   isAvailable: 'isAvailable',
   isActive: 'isActive',
+  telegramChannelMessageId: 'telegramChannelMessageId',
+  telegramButtonMessageId: 'telegramButtonMessageId',
+  telegramPublishedAt: 'telegramPublishedAt',
+  telegramSyncedAt: 'telegramSyncedAt',
+  telegramSyncStatus: 'telegramSyncStatus',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type ProductScalarFieldEnum = (typeof ProductScalarFieldEnum)[keyof typeof ProductScalarFieldEnum]
+
+
+export const ProductMediaScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  type: 'type',
+  fileId: 'fileId',
+  url: 'url',
+  position: 'position',
+  mimeType: 'mimeType',
+  width: 'width',
+  height: 'height',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ProductMediaScalarFieldEnum = (typeof ProductMediaScalarFieldEnum)[keyof typeof ProductMediaScalarFieldEnum]
+
+
+export const ProductTelegramMessageScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  messageId: 'messageId',
+  position: 'position',
+  createdAt: 'createdAt'
+} as const
+
+export type ProductTelegramMessageScalarFieldEnum = (typeof ProductTelegramMessageScalarFieldEnum)[keyof typeof ProductTelegramMessageScalarFieldEnum]
 
 
 export const OrderScalarFieldEnum = {
@@ -132,6 +170,7 @@ export const OrderScalarFieldEnum = {
   status: 'status',
   phone: 'phone',
   deliveryAddress: 'deliveryAddress',
+  btcPostBranchNumber: 'btcPostBranchNumber',
   latitude: 'latitude',
   longitude: 'longitude',
   note: 'note',
@@ -148,6 +187,34 @@ export const OrderScalarFieldEnum = {
 } as const
 
 export type OrderScalarFieldEnum = (typeof OrderScalarFieldEnum)[keyof typeof OrderScalarFieldEnum]
+
+
+export const PaymentScalarFieldEnum = {
+  id: 'id',
+  orderId: 'orderId',
+  amount: 'amount',
+  status: 'status',
+  provider: 'provider',
+  externalId: 'externalId',
+  paidAt: 'paidAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PaymentScalarFieldEnum = (typeof PaymentScalarFieldEnum)[keyof typeof PaymentScalarFieldEnum]
+
+
+export const AuditLogScalarFieldEnum = {
+  id: 'id',
+  actorUserId: 'actorUserId',
+  action: 'action',
+  entityType: 'entityType',
+  entityId: 'entityId',
+  metadata: 'metadata',
+  createdAt: 'createdAt'
+} as const
+
+export type AuditLogScalarFieldEnum = (typeof AuditLogScalarFieldEnum)[keyof typeof AuditLogScalarFieldEnum]
 
 
 export const OrderItemScalarFieldEnum = {
@@ -198,6 +265,14 @@ export const SortOrder = {
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
 
 
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
+
+
 export const QueryMode = {
   default: 'default',
   insensitive: 'insensitive'
@@ -212,4 +287,13 @@ export const NullsOrder = {
 } as const
 
 export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
+export const JsonNullValueFilter = {
+  DbNull: DbNull,
+  JsonNull: JsonNull,
+  AnyNull: AnyNull
+} as const
+
+export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 

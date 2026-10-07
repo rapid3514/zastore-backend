@@ -57,10 +57,30 @@ export type Category = Prisma.CategoryModel
  */
 export type Product = Prisma.ProductModel
 /**
+ * Model ProductMedia
+ * 
+ */
+export type ProductMedia = Prisma.ProductMediaModel
+/**
+ * Model ProductTelegramMessage
+ * 
+ */
+export type ProductTelegramMessage = Prisma.ProductTelegramMessageModel
+/**
  * Model Order
  * 
  */
 export type Order = Prisma.OrderModel
+/**
+ * Model Payment
+ * 
+ */
+export type Payment = Prisma.PaymentModel
+/**
+ * Model AuditLog
+ * 
+ */
+export type AuditLog = Prisma.AuditLogModel
 /**
  * Model OrderItem
  * 

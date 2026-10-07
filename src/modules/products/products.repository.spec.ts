@@ -32,6 +32,13 @@ describe('ProductsRepository.list', () => {
       ]),
     );
     expect(args).toMatchObject({ skip: 10, take: 10 });
+    expect(args.select.media.select).toEqual({
+      id: true,
+      type: true,
+      url: true,
+      position: true,
+    });
+    expect(args.select.media.select).not.toHaveProperty('fileId');
     expect(count).toHaveBeenCalledWith({ where: args.where });
   });
 
@@ -48,6 +55,10 @@ describe('ProductsRepository.list', () => {
       isActive: false,
       isAvailable: false,
     });
+    expect(findMany.mock.calls[0][0].include).toHaveProperty('media');
+    expect(findMany.mock.calls[0][0].include).toHaveProperty(
+      'telegramMessages',
+    );
   });
 
   it('counts historical order references before deletion', async () => {
@@ -60,5 +71,44 @@ describe('ProductsRepository.list', () => {
     expect(count).toHaveBeenCalledWith({
       where: { productId: 'product-1' },
     });
+  });
+
+  it('creates and replaces media with atomic nested writes', async () => {
+    const create = vi.fn().mockResolvedValue({});
+    const update = vi.fn().mockResolvedValue({});
+    const repository = new ProductsRepository({
+      product: { create, update },
+    } as never);
+    const data = {
+      name: 'Product',
+      price: 100,
+      categoryId: '11111111-1111-4111-8111-111111111111',
+    };
+    const media = [
+      {
+        type: 'IMAGE' as const,
+        fileId: 'file-1',
+        url: 'https://ik.imagekit.io/account/products/one.jpg',
+        position: 0,
+      },
+    ];
+
+    await repository.createWithMedia(data, media);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ media: { create: media } }),
+      }),
+    );
+
+    await repository.replaceMedia('product-1', { name: 'Updated' }, media);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'product-1' },
+        data: {
+          name: 'Updated',
+          media: { deleteMany: {}, create: media },
+        },
+      }),
+    );
   });
 });

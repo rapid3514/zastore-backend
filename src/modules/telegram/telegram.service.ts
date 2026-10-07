@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { OrderStatus } from '../../generated/prisma/client.js';
 import { UsersService } from '../users/users.service.js';
 import {
   registrationKeyboard,
@@ -23,10 +24,8 @@ import type {
 const messages = {
   registration: 'Ro‘yxatdan o‘tish uchun telefon raqamingizni yuboring',
   registrationSuccess: '✅ Ro‘yxatdan muvaffaqiyatli o‘tdingiz',
-  ownContactOnly:
-    '❌ Iltimos, o‘zingizning telefon raqamingizni yuboring.',
-  privateChat:
-    'Ro‘yxatdan o‘tish uchun bot bilan shaxsiy chatni oching.',
+  ownContactOnly: '❌ Iltimos, o‘zingizning telefon raqamingizni yuboring.',
+  privateChat: 'Ro‘yxatdan o‘tish uchun bot bilan shaxsiy chatni oching.',
   blocked: '⛔ Hisobingiz bloklangan',
   phoneInUse: '❌ Bu telefon raqami boshqa akkauntga biriktirilgan.',
   phoneRequest: 'Telefon raqamingizni yuboring:',
@@ -41,6 +40,13 @@ const botCommands = [
   { command: 'start', description: 'Botni ishga tushirish' },
   { command: 'phone', description: 'Telefon raqamni qo‘shish yoki yangilash' },
 ] as const;
+
+export interface TelegramMediaInput {
+  type: 'photo' | 'video';
+  media: string;
+  caption?: string;
+  parse_mode?: 'HTML';
+}
 
 @Injectable()
 export class TelegramService {
@@ -92,6 +98,64 @@ export class TelegramService {
     } catch {
       this.logger.error('Telegram commands could not be registered');
     }
+  }
+
+  async sendNewOrderNotification(
+    chatId: string,
+    order: {
+      id: string;
+      total: { toString(): string } | string | number;
+      createdAt: Date;
+      btcPostBranchNumber?: string | null;
+      user: { firstName: string; lastName?: string | null };
+    },
+  ): Promise<void> {
+    const customer = [order.user.firstName, order.user.lastName]
+      .filter(Boolean)
+      .join(' ');
+    await this.sendMessage(
+      chatId,
+      [
+        '🛍 Yangi buyurtma',
+        '',
+        `Buyurtma: #${order.id}`,
+        `Mijoz: ${customer}`,
+        ...(order.btcPostBranchNumber
+          ? [`BTC pochta filiali: ${order.btcPostBranchNumber}`]
+          : []),
+        `Summa: ${order.total.toString()}`,
+        `Vaqt: ${order.createdAt.toISOString()}`,
+        '',
+        'Admin panelni tekshiring.',
+      ].join('\n'),
+    );
+  }
+
+  async sendOrderRejectedNotification(
+    chatId: string,
+    orderId: string,
+  ): Promise<void> {
+    await this.sendMessage(
+      chatId,
+      `❌ Buyurtmangiz rad etildi\n\nBuyurtma: #${orderId}`,
+    );
+  }
+
+  async sendOrderStatusNotification(
+    chatId: string,
+    orderId: string,
+    status: OrderStatus,
+  ): Promise<void> {
+    const text: Partial<Record<OrderStatus, string>> = {
+      [OrderStatus.CONFIRMED]: '✅ Buyurtmangiz tasdiqlandi',
+      [OrderStatus.PROCESSING]: '📦 Buyurtmangiz tayyorlanmoqda',
+      [OrderStatus.COMPLETED]: '✅ Buyurtmangiz yakunlandi',
+      [OrderStatus.CANCELLED]: '🚫 Buyurtma bekor qilindi',
+      [OrderStatus.EXPIRED]: '⌛ Buyurtmani tasdiqlash muddati tugadi',
+    };
+    const message = text[status];
+    if (!message) return;
+    await this.sendMessage(chatId, `${message}\n\nBuyurtma: #${orderId}`);
   }
 
   private async handleStart(message: TelegramMessage): Promise<void> {
@@ -211,11 +275,138 @@ export class TelegramService {
     await this.sendMessage(chatId, messages.openShop, shopKeyboard(miniAppUrl));
   }
 
-  private async sendMessage(
-    chatId: number,
+  async sendMessage(
+    chatId: number | string,
     text: string,
     replyMarkup?: Record<string, unknown>,
+  ): Promise<number> {
+    const message = await this.callTelegram<TelegramMessage>('sendMessage', {
+      chat_id: chatId,
+      text,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+    if (!message || !Number.isSafeInteger(message.message_id)) {
+      throw new BadGatewayException('Telegram response is missing message_id');
+    }
+    return message.message_id;
+  }
+
+  async sendPhoto(
+    chatId: string,
+    photoUrl: string,
+    caption: string,
+    replyMarkup?: Record<string, unknown>,
+  ): Promise<number> {
+    const message = await this.callTelegram<TelegramMessage>('sendPhoto', {
+      chat_id: chatId,
+      photo: photoUrl,
+      caption,
+      parse_mode: 'HTML',
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+    if (!message || !Number.isSafeInteger(message.message_id)) {
+      throw new BadGatewayException('Telegram response is missing message_id');
+    }
+    return message.message_id;
+  }
+
+  async sendVideo(
+    chatId: string,
+    videoUrl: string,
+    caption: string,
+    replyMarkup?: Record<string, unknown>,
+  ): Promise<number> {
+    const message = await this.callTelegram<TelegramMessage>('sendVideo', {
+      chat_id: chatId,
+      video: videoUrl,
+      caption,
+      parse_mode: 'HTML',
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+    if (!message || !Number.isSafeInteger(message.message_id)) {
+      throw new BadGatewayException('Telegram response is missing message_id');
+    }
+    return message.message_id;
+  }
+
+  async sendMediaGroup(
+    chatId: string,
+    media: TelegramMediaInput[],
+  ): Promise<number[]> {
+    const messages = await this.callTelegram<TelegramMessage[]>(
+      'sendMediaGroup',
+      { chat_id: chatId, media },
+    );
+    if (
+      !Array.isArray(messages) ||
+      messages.length !== media.length ||
+      messages.some((message) => !Number.isSafeInteger(message.message_id))
+    ) {
+      throw new BadGatewayException(
+        'Telegram response is missing media group message_id values',
+      );
+    }
+    return messages.map((message) => message.message_id);
+  }
+
+  async editMessageCaption(
+    chatId: string,
+    messageId: number,
+    caption: string,
+    replyMarkup?: Record<string, unknown>,
   ): Promise<void> {
+    await this.callTelegram<unknown>('editMessageCaption', {
+      chat_id: chatId,
+      message_id: messageId,
+      caption,
+      parse_mode: 'HTML',
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+  }
+
+  async editMessageReplyMarkup(
+    chatId: string,
+    messageId: number,
+    replyMarkup: Record<string, unknown>,
+  ): Promise<void> {
+    await this.callTelegram<unknown>('editMessageReplyMarkup', {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: replyMarkup,
+    });
+  }
+
+  async editMessageMedia(
+    chatId: string,
+    messageId: number,
+    photoUrl: string,
+    caption: string,
+    replyMarkup?: Record<string, unknown>,
+  ): Promise<void> {
+    await this.callTelegram<unknown>('editMessageMedia', {
+      chat_id: chatId,
+      message_id: messageId,
+      media: {
+        type: 'photo',
+        media: photoUrl,
+        caption,
+        parse_mode: 'HTML',
+      },
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+  }
+
+  async deleteMessage(chatId: string, messageId: number): Promise<void> {
+    await this.callTelegram<unknown>('deleteMessage', {
+      chat_id: chatId,
+      message_id: messageId,
+    });
+  }
+
+  private async callTelegram<T>(
+    method: string,
+    body: Record<string, unknown>,
+  ): Promise<T> {
     const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
     if (!token) {
       throw new ServiceUnavailableException(
@@ -224,17 +415,9 @@ export class TelegramService {
     }
 
     let statusCode: number;
-    let payload: TelegramApiResponse<unknown>;
+    let payload: TelegramApiResponse<T>;
     try {
-      ({ statusCode, payload } = await postTelegram<unknown>(
-        token,
-        'sendMessage',
-        {
-          chat_id: chatId,
-          text,
-          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-        },
-      ));
+      ({ statusCode, payload } = await postTelegram<T>(token, method, body));
     } catch {
       throw new BadGatewayException('Telegram API is unavailable');
     }
@@ -244,5 +427,9 @@ export class TelegramService {
         payload.description ?? 'Telegram API request failed',
       );
     }
+    if (payload.result === undefined) {
+      return undefined as T;
+    }
+    return payload.result;
   }
 }

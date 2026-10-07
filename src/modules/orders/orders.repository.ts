@@ -189,6 +189,7 @@ export class OrdersRepository {
     status: OrderStatus;
     phone: string | null;
     deliveryAddress: string | null;
+    btcPostBranchNumber: string | null;
     latitude: Prisma.Decimal | null;
     longitude: Prisma.Decimal | null;
     note: string | null;
@@ -211,6 +212,7 @@ export class OrdersRepository {
           status: data.status,
           phone: data.phone,
           deliveryAddress: data.deliveryAddress,
+          btcPostBranchNumber: data.btcPostBranchNumber,
           latitude: data.latitude,
           longitude: data.longitude,
           note: data.note,

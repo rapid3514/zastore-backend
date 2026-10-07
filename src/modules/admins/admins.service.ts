@@ -4,13 +4,22 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { UserRole, type User } from '../../generated/prisma/client.js';
+import {
+  AuditAction,
+  AuditEntityType,
+  UserRole,
+  type User,
+} from '../../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
 import { AdminsRepository } from './admins.repository.js';
 import type { UpdateAdminDto } from './dto/update-admin.dto.js';
 
 @Injectable()
 export class AdminsService {
-  constructor(private readonly adminsRepository: AdminsRepository) {}
+  constructor(
+    private readonly adminsRepository: AdminsRepository,
+    private readonly auditService?: AuditService,
+  ) {}
 
   async me(actorUserId: string) {
     const user = await this.requireAdmin(actorUserId);
@@ -43,9 +52,15 @@ export class AdminsService {
     if (!Object.keys(data).length) {
       throw new BadRequestException('At least one editable field is required');
     }
-    return this.present(
-      await this.adminsRepository.updateProfile(target.id, data),
-    );
+    const updated = await this.adminsRepository.updateProfile(target.id, data);
+    await this.auditService?.log({
+      actorUserId,
+      action: AuditAction.ADMIN_UPDATE,
+      entityType: AuditEntityType.USER,
+      entityId: target.id,
+      metadata: { fields: Object.keys(data) },
+    });
+    return this.present(updated);
   }
 
   async promote(actorUserId: string, targetUserId: string) {
@@ -63,9 +78,18 @@ export class AdminsService {
     if (target.role !== UserRole.CUSTOMER) {
       throw new BadRequestException('Only customers can be promoted');
     }
-    return this.present(
-      await this.adminsRepository.setRole(target.id, UserRole.ADMIN),
+    const updated = await this.adminsRepository.setRole(
+      target.id,
+      UserRole.ADMIN,
     );
+    await this.auditService?.log({
+      actorUserId,
+      action: AuditAction.ADMIN_PROMOTE,
+      entityType: AuditEntityType.USER,
+      entityId: target.id,
+      metadata: { from: target.role, to: UserRole.ADMIN },
+    });
+    return this.present(updated);
   }
 
   async demote(actorUserId: string, targetUserId: string) {
@@ -80,9 +104,18 @@ export class AdminsService {
     if (target.role !== UserRole.ADMIN) {
       throw new BadRequestException('Target user is not an admin');
     }
-    return this.present(
-      await this.adminsRepository.setRole(target.id, UserRole.CUSTOMER),
+    const updated = await this.adminsRepository.setRole(
+      target.id,
+      UserRole.CUSTOMER,
     );
+    await this.auditService?.log({
+      actorUserId,
+      action: AuditAction.ADMIN_DEMOTE,
+      entityType: AuditEntityType.USER,
+      entityId: target.id,
+      metadata: { from: target.role, to: UserRole.CUSTOMER },
+    });
+    return this.present(updated);
   }
 
   async block(actorUserId: string, targetUserId: string) {
@@ -110,9 +143,18 @@ export class AdminsService {
       throw new BadRequestException('Target user is not an admin');
     }
     if (target.isBlocked === isBlocked) return this.present(target);
-    return this.present(
-      await this.adminsRepository.setBlocked(target.id, isBlocked),
+    const updated = await this.adminsRepository.setBlocked(
+      target.id,
+      isBlocked,
     );
+    await this.auditService?.log({
+      actorUserId,
+      action: isBlocked ? AuditAction.ADMIN_BLOCK : AuditAction.ADMIN_UNBLOCK,
+      entityType: AuditEntityType.USER,
+      entityId: target.id,
+      metadata: { isBlocked },
+    });
+    return this.present(updated);
   }
 
   private async requireAdmin(id: string): Promise<User> {

@@ -19,6 +19,23 @@ export const UserRole = {
 export type UserRole = (typeof UserRole)[keyof typeof UserRole]
 
 
+export const ProductMediaType = {
+  IMAGE: 'IMAGE',
+  VIDEO: 'VIDEO'
+} as const
+
+export type ProductMediaType = (typeof ProductMediaType)[keyof typeof ProductMediaType]
+
+
+export const TelegramProductSyncStatus = {
+  PENDING: 'PENDING',
+  SYNCED: 'SYNCED',
+  FAILED: 'FAILED'
+} as const
+
+export type TelegramProductSyncStatus = (typeof TelegramProductSyncStatus)[keyof typeof TelegramProductSyncStatus]
+
+
 export const OrderStatus = {
   PENDING_CONFIRMATION: 'PENDING_CONFIRMATION',
   CONFIRMED: 'CONFIRMED',
@@ -29,6 +46,50 @@ export const OrderStatus = {
 } as const
 
 export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus]
+
+
+export const PaymentStatus = {
+  PENDING: 'PENDING',
+  PAID: 'PAID',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED'
+} as const
+
+export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus]
+
+
+export const AuditAction = {
+  CATEGORY_CREATE: 'CATEGORY_CREATE',
+  CATEGORY_UPDATE: 'CATEGORY_UPDATE',
+  CATEGORY_STATUS_CHANGE: 'CATEGORY_STATUS_CHANGE',
+  CATEGORY_DELETE: 'CATEGORY_DELETE',
+  PRODUCT_CREATE: 'PRODUCT_CREATE',
+  PRODUCT_UPDATE: 'PRODUCT_UPDATE',
+  PRODUCT_STATUS_CHANGE: 'PRODUCT_STATUS_CHANGE',
+  PRODUCT_DELETE: 'PRODUCT_DELETE',
+  ORDER_CONFIRM: 'ORDER_CONFIRM',
+  ORDER_REJECT: 'ORDER_REJECT',
+  ORDER_STATUS_CHANGE: 'ORDER_STATUS_CHANGE',
+  WORK_HOURS_UPDATE: 'WORK_HOURS_UPDATE',
+  ADMIN_UPDATE: 'ADMIN_UPDATE',
+  ADMIN_PROMOTE: 'ADMIN_PROMOTE',
+  ADMIN_DEMOTE: 'ADMIN_DEMOTE',
+  ADMIN_BLOCK: 'ADMIN_BLOCK',
+  ADMIN_UNBLOCK: 'ADMIN_UNBLOCK'
+} as const
+
+export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction]
+
+
+export const AuditEntityType = {
+  CATEGORY: 'CATEGORY',
+  PRODUCT: 'PRODUCT',
+  ORDER: 'ORDER',
+  WORK_HOURS: 'WORK_HOURS',
+  USER: 'USER'
+} as const
+
+export type AuditEntityType = (typeof AuditEntityType)[keyof typeof AuditEntityType]
 
 
 export const WeekDay = {

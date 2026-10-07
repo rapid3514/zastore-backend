@@ -4,7 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Category } from '../../generated/prisma/client.js';
+import {
+  AuditAction,
+  AuditEntityType,
+  type Category,
+} from '../../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
 import { CategoriesRepository } from './categories.repository.js';
 import type { CreateCategoryDto } from './dto/create-category.dto.js';
 import type { UpdateCategoryDto } from './dto/update-category.dto.js';
@@ -39,7 +44,10 @@ const categoryHasProducts = () =>
 
 @Injectable()
 export class CategoriesService {
-  constructor(private readonly categoriesRepository: CategoriesRepository) {}
+  constructor(
+    private readonly categoriesRepository: CategoriesRepository,
+    private readonly auditService?: AuditService,
+  ) {}
 
   async findPublic(): Promise<PublicCategoryResponseDto[]> {
     const categories = await this.categoriesRepository.findPublicCategories();
@@ -57,7 +65,10 @@ export class CategoriesService {
     return categories.map((category) => this.toAdminResponse(category));
   }
 
-  async create(dto: CreateCategoryDto): Promise<AdminCategoryResponseDto> {
+  async create(
+    dto: CreateCategoryDto,
+    actorUserId?: string,
+  ): Promise<AdminCategoryResponseDto> {
     const name = normalizeCategoryName(dto.name);
     const slug = this.slugFromName(name);
     if (await this.categoriesRepository.findDuplicateByNameOrSlug(name, slug)) {
@@ -72,6 +83,15 @@ export class CategoriesService {
         imageUrl: dto.imageUrl ?? null,
         sortOrder: dto.sortOrder ?? 0,
       });
+      if (actorUserId) {
+        await this.auditService?.log({
+          actorUserId,
+          action: AuditAction.CATEGORY_CREATE,
+          entityType: AuditEntityType.CATEGORY,
+          entityId: category.id,
+          metadata: { name: category.name },
+        });
+      }
       return this.toAdminResponse(category);
     } catch (error) {
       if (this.isPrismaError(error, 'P2002')) throw duplicateCategory();
@@ -82,6 +102,7 @@ export class CategoriesService {
   async update(
     id: string,
     dto: UpdateCategoryDto,
+    actorUserId?: string,
   ): Promise<AdminCategoryResponseDto> {
     const existing = await this.categoriesRepository.findById(id);
     if (!existing) throw categoryNotFound();
@@ -110,9 +131,17 @@ export class CategoriesService {
 
     if (!Object.keys(data).length) return this.toAdminResponse(existing);
     try {
-      return this.toAdminResponse(
-        await this.categoriesRepository.update(id, data),
-      );
+      const category = await this.categoriesRepository.update(id, data);
+      if (actorUserId) {
+        await this.auditService?.log({
+          actorUserId,
+          action: AuditAction.CATEGORY_UPDATE,
+          entityType: AuditEntityType.CATEGORY,
+          entityId: id,
+          metadata: { fields: Object.keys(data) },
+        });
+      }
+      return this.toAdminResponse(category);
     } catch (error) {
       if (this.isPrismaError(error, 'P2002')) throw duplicateCategory();
       if (this.isPrismaError(error, 'P2025')) throw categoryNotFound();
@@ -120,15 +149,21 @@ export class CategoriesService {
     }
   }
 
-  activate(id: string): Promise<AdminCategoryResponseDto> {
-    return this.setActive(id, true);
+  activate(
+    id: string,
+    actorUserId?: string,
+  ): Promise<AdminCategoryResponseDto> {
+    return this.setActive(id, true, actorUserId);
   }
 
-  deactivate(id: string): Promise<AdminCategoryResponseDto> {
-    return this.setActive(id, false);
+  deactivate(
+    id: string,
+    actorUserId?: string,
+  ): Promise<AdminCategoryResponseDto> {
+    return this.setActive(id, false, actorUserId);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actorUserId?: string): Promise<void> {
     if (!(await this.categoriesRepository.findById(id))) {
       throw categoryNotFound();
     }
@@ -137,6 +172,14 @@ export class CategoriesService {
     }
     try {
       await this.categoriesRepository.delete(id);
+      if (actorUserId) {
+        await this.auditService?.log({
+          actorUserId,
+          action: AuditAction.CATEGORY_DELETE,
+          entityType: AuditEntityType.CATEGORY,
+          entityId: id,
+        });
+      }
     } catch (error) {
       if (this.isPrismaError(error, 'P2003')) {
         throw categoryHasProducts();
@@ -149,14 +192,23 @@ export class CategoriesService {
   private async setActive(
     id: string,
     isActive: boolean,
+    actorUserId?: string,
   ): Promise<AdminCategoryResponseDto> {
     const category = await this.categoriesRepository.findById(id);
     if (!category) throw categoryNotFound();
     if (category.isActive === isActive) return this.toAdminResponse(category);
     try {
-      return this.toAdminResponse(
-        await this.categoriesRepository.setActive(id, isActive),
-      );
+      const updated = await this.categoriesRepository.setActive(id, isActive);
+      if (actorUserId) {
+        await this.auditService?.log({
+          actorUserId,
+          action: AuditAction.CATEGORY_STATUS_CHANGE,
+          entityType: AuditEntityType.CATEGORY,
+          entityId: id,
+          metadata: { from: category.isActive, to: isActive },
+        });
+      }
+      return this.toAdminResponse(updated);
     } catch (error) {
       if (this.isPrismaError(error, 'P2025')) throw categoryNotFound();
       throw error;

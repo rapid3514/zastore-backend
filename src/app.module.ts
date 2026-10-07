@@ -16,6 +16,11 @@ import { OrdersModule } from './modules/orders/orders.module.js';
 import { ProductsModule } from './modules/products/products.module.js';
 import { WorkHoursModule } from './modules/work-hours/work-hours.module.js';
 import { PresenceModule } from './modules/presence/presence.module.js';
+import { AuditModule } from './modules/audit/audit.module.js';
+import { HealthModule } from './modules/health/health.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { PaymentsModule } from './modules/payments/payments.module.js';
+import { MediaModule } from './modules/media/media.module.js';
 
 @Module({
   imports: [
@@ -36,6 +41,11 @@ import { PresenceModule } from './modules/presence/presence.module.js';
     OrdersModule,
     WorkHoursModule,
     PresenceModule,
+    NotificationsModule,
+    PaymentsModule,
+    MediaModule,
+    AuditModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [

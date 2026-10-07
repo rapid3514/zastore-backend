@@ -6,10 +6,26 @@ import { UsersModule } from '../users/users.module.js';
 import { ProductsController } from './products.controller.js';
 import { ProductsRepository } from './products.repository.js';
 import { ProductsService } from './products.service.js';
+import { AuditModule } from '../audit/audit.module.js';
+import { MediaModule } from '../media/media.module.js';
+import { TelegramModule } from '../telegram/telegram.module.js';
+import { ProductTelegramPublisherService } from './product-telegram-publisher.service.js';
 
 @Module({
-  imports: [UsersModule, PassportModule.register({ defaultStrategy: 'jwt' })],
+  imports: [
+    UsersModule,
+    AuditModule,
+    MediaModule,
+    TelegramModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+  ],
   controllers: [ProductsController],
-  providers: [ProductsRepository, ProductsService, JwtAuthGuard, RolesGuard],
+  providers: [
+    ProductsRepository,
+    ProductsService,
+    ProductTelegramPublisherService,
+    JwtAuthGuard,
+    RolesGuard,
+  ],
 })
 export class ProductsModule {}

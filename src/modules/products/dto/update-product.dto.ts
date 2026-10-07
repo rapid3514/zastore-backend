@@ -1,16 +1,19 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  ArrayMaxSize,
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   IsUUID,
   Max,
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { ProductImageDto } from '../../media/dto/product-image.dto.js';
+import { ProductMediaDto } from './product-media.dto.js';
 
 const trimString = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
@@ -40,8 +43,15 @@ export class UpdateProductDto {
   price?: number;
 
   @IsOptional()
-  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
-  imageUrl?: string | null;
+  @ValidateNested()
+  @Type(() => ProductImageDto)
+  image?: ProductImageDto;
+
+  @IsOptional()
+  @ArrayMaxSize(6)
+  @ValidateNested({ each: true })
+  @Type(() => ProductMediaDto)
+  media?: ProductMediaDto[];
 
   @IsOptional()
   @IsUUID()

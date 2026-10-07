@@ -37,6 +37,12 @@ export class CreateOrderDto {
   deliveryAddress?: string;
 
   @IsOptional()
+  @Transform(normalizeText)
+  @IsString()
+  @MaxLength(50)
+  btcPostBranchNumber?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(-90)

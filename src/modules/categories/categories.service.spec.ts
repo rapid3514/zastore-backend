@@ -1,5 +1,9 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import type { Category } from '../../generated/prisma/client.js';
+import {
+  AuditAction,
+  AuditEntityType,
+  type Category,
+} from '../../generated/prisma/client.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CategoriesService } from './categories.service.js';
 
@@ -55,6 +59,23 @@ describe('CategoriesService', () => {
       description: null,
       imageUrl: null,
       sortOrder: 1,
+    });
+  });
+
+  it('writes the category-create audit event with the authenticated actor', async () => {
+    const audit = { log: vi.fn().mockResolvedValue(undefined) };
+    service = new CategoriesService(repository as never, audit as never);
+    repository.findDuplicateByNameOrSlug.mockResolvedValue(null);
+    repository.create.mockResolvedValue(category());
+
+    await service.create({ name: 'Burgerlar' }, 'actor-id');
+
+    expect(audit.log).toHaveBeenCalledWith({
+      actorUserId: 'actor-id',
+      action: AuditAction.CATEGORY_CREATE,
+      entityType: AuditEntityType.CATEGORY,
+      entityId: categoryId,
+      metadata: { name: 'Burgerlar' },
     });
   });
 

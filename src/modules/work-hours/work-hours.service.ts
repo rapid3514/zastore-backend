@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WeekDay } from '../../generated/prisma/client.js';
+import { AuditAction, AuditEntityType } from '../../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
 import {
   WorkHoursRepository,
   type WorkHourScheduleEntry,
@@ -53,6 +55,7 @@ export class WorkHoursService {
   constructor(
     private readonly workHoursRepository: WorkHoursRepository,
     configService: ConfigService,
+    private readonly auditService?: AuditService,
   ) {
     this.timeZone = configService.getOrThrow<string>('TZ');
   }
@@ -83,6 +86,7 @@ export class WorkHoursService {
       openTime?: string | null;
       closeTime?: string | null;
     }>,
+    actorUserId?: string,
   ): Promise<WorkHourScheduleEntry[]> {
     const normalized = entries.map((entry) => ({
       dayOfWeek: entry.dayOfWeek,
@@ -91,7 +95,31 @@ export class WorkHoursService {
       closeTime: entry.isOpen ? (entry.closeTime ?? '18:00') : null,
     }));
 
+    for (const entry of normalized) {
+      if (
+        entry.isOpen &&
+        entry.openTime &&
+        entry.closeTime &&
+        this.toMinutesFromClock(entry.openTime) >=
+          this.toMinutesFromClock(entry.closeTime)
+      ) {
+        throw new BadRequestException({
+          error: 'INVALID_WORK_HOURS',
+          message: "openTime closeTime dan oldin bo'lishi kerak",
+        });
+      }
+    }
+
     await this.workHoursRepository.upsertMany(normalized);
+    if (actorUserId) {
+      await this.auditService?.log({
+        actorUserId,
+        action: AuditAction.WORK_HOURS_UPDATE,
+        entityType: AuditEntityType.WORK_HOURS,
+        entityId: 'schedule',
+        metadata: { days: normalized.map((entry) => entry.dayOfWeek) },
+      });
+    }
     return this.getSchedule();
   }
 
@@ -313,9 +341,7 @@ export class WorkHoursService {
     hours: number;
     minutes: number;
   }) {
-    const next = new Date(
-      Date.UTC(parts.year, parts.month - 1, parts.day + 1),
-    );
+    const next = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1));
     parts.year = next.getUTCFullYear();
     parts.month = next.getUTCMonth() + 1;
     parts.day = next.getUTCDate();

@@ -29,6 +29,7 @@ model User {
   lastSeenAt      DateTime?
   refreshSessions RefreshSession[] @relation("UserRefreshSessions")
   orders          Order[]          @relation("UserOrders")
+  auditLogs       AuditLog[]       @relation("UserAuditLogs")
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -51,21 +52,75 @@ model Category {
 }
 
 model Product {
-  id          String      @id @default(uuid()) @db.Uuid
-  name        String
-  description String?
-  price       Decimal     @db.Decimal(10, 2)
-  imageUrl    String?
-  categoryId  String      @db.Uuid
-  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  isAvailable Boolean     @default(true)
-  isActive    Boolean     @default(true)
-  orderItems  OrderItem[] @relation("ProductOrderItems")
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                       String                    @id @default(uuid()) @db.Uuid
+  name                     String
+  description              String?
+  price                    Decimal                   @db.Decimal(10, 2)
+  imageUrl                 String?
+  imageFileId              String?
+  categoryId               String                    @db.Uuid
+  category                 Category                  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  isAvailable              Boolean                   @default(true)
+  isActive                 Boolean                   @default(true)
+  telegramChannelMessageId Int?
+  telegramButtonMessageId  Int?
+  telegramPublishedAt      DateTime?
+  telegramSyncedAt         DateTime?
+  telegramSyncStatus       TelegramProductSyncStatus @default(PENDING)
+  orderItems               OrderItem[]               @relation("ProductOrderItems")
+  media                    ProductMedia[]
+  telegramMessages         ProductTelegramMessage[]
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
 
   @@index([categoryId, isActive])
   @@index([isActive, createdAt])
+  @@index([imageFileId])
+  @@index([telegramSyncStatus])
+}
+
+enum ProductMediaType {
+  IMAGE
+  VIDEO
+}
+
+model ProductMedia {
+  id        String           @id @default(uuid()) @db.Uuid
+  productId String           @db.Uuid
+  product   Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type      ProductMediaType
+  fileId    String
+  url       String
+  position  Int
+  mimeType  String?
+  width     Int?
+  height    Int?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([productId, fileId])
+  @@unique([productId, type, position])
+  @@index([productId, type, position])
+  @@index([fileId])
+}
+
+model ProductTelegramMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @db.Uuid
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  messageId Int
+  position  Int
+  createdAt DateTime @default(now())
+
+  @@unique([productId, messageId])
+  @@unique([productId, position])
+  @@index([productId, position])
+}
+
+enum TelegramProductSyncStatus {
+  PENDING
+  SYNCED
+  FAILED
 }
 
 enum OrderStatus {
@@ -75,6 +130,41 @@ enum OrderStatus {
   COMPLETED
   CANCELLED
   EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum AuditAction {
+  CATEGORY_CREATE
+  CATEGORY_UPDATE
+  CATEGORY_STATUS_CHANGE
+  CATEGORY_DELETE
+  PRODUCT_CREATE
+  PRODUCT_UPDATE
+  PRODUCT_STATUS_CHANGE
+  PRODUCT_DELETE
+  ORDER_CONFIRM
+  ORDER_REJECT
+  ORDER_STATUS_CHANGE
+  WORK_HOURS_UPDATE
+  ADMIN_UPDATE
+  ADMIN_PROMOTE
+  ADMIN_DEMOTE
+  ADMIN_BLOCK
+  ADMIN_UNBLOCK
+}
+
+enum AuditEntityType {
+  CATEGORY
+  PRODUCT
+  ORDER
+  WORK_HOURS
+  USER
 }
 
 enum WeekDay {
@@ -94,6 +184,7 @@ model Order {
   status               OrderStatus @default(PENDING_CONFIRMATION)
   phone                String?
   deliveryAddress      String?
+  btcPostBranchNumber  String?
   latitude             Decimal?    @db.Decimal(9, 6)
   longitude            Decimal?    @db.Decimal(9, 6)
   note                 String?
@@ -106,6 +197,7 @@ model Order {
   expiredAt            DateTime?
   cancelReason         String?
   items                OrderItem[]
+  payment              Payment?
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
@@ -113,6 +205,38 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([confirmationDeadline])
+}
+
+model Payment {
+  id         String        @id @default(uuid()) @db.Uuid
+  orderId    String        @unique @db.Uuid
+  order      Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  amount     Decimal       @db.Decimal(10, 2)
+  status     PaymentStatus @default(PENDING)
+  provider   String?
+  externalId String?
+  paidAt     DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([status, createdAt])
+  @@index([provider])
+}
+
+model AuditLog {
+  id          String          @id @default(uuid()) @db.Uuid
+  actorUserId String          @db.Uuid
+  actor       User            @relation("UserAuditLogs", fields: [actorUserId], references: [id], onDelete: Restrict)
+  action      AuditAction
+  entityType  AuditEntityType
+  entityId    String
+  metadata    Json?
+  createdAt   DateTime        @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, createdAt])
+  @@index([createdAt])
 }
 
 model OrderItem {

@@ -6,9 +6,14 @@ import { UsersModule } from '../users/users.module.js';
 import { AdminsController } from './admins.controller.js';
 import { AdminsRepository } from './admins.repository.js';
 import { AdminsService } from './admins.service.js';
+import { AuditModule } from '../audit/audit.module.js';
 
 @Module({
-  imports: [UsersModule, PassportModule.register({ defaultStrategy: 'jwt' })],
+  imports: [
+    UsersModule,
+    AuditModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+  ],
   controllers: [AdminsController],
   providers: [AdminsRepository, AdminsService, JwtAuthGuard, RolesGuard],
   exports: [AdminsService],

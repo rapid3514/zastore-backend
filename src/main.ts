@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
@@ -17,6 +17,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix(
     configService.getOrThrow<string>('API_PREFIX').replace(/^\/+|\/+$/g, ''),
+    { exclude: [{ path: 'health', method: RequestMethod.GET }] },
   );
   app.use(helmet());
   app.enableCors({ origin: corsOrigins, credentials: true });

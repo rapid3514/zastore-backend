@@ -2,16 +2,29 @@ import { type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { UserRole } from '../src/generated/prisma/client.js';
 import { TelegramController } from '../src/modules/telegram/telegram.controller.js';
+import { postTelegram } from '../src/modules/telegram/telegram-api.js';
 import { TelegramService } from '../src/modules/telegram/telegram.service.js';
 import { UsersRepository } from '../src/modules/users/users.repository.js';
 import { UsersService } from '../src/modules/users/users.service.js';
 
+vi.mock('../src/modules/telegram/telegram-api.js', () => ({
+  postTelegram: vi.fn(),
+}));
+
 describe('Telegram registration webhook (e2e)', () => {
   let app: INestApplication;
-  const fetchMock = vi.fn();
+  const postTelegramMock = vi.mocked(postTelegram);
   const usersRepository = {
     findByTelegramId: vi.fn(),
     findById: vi.fn(),
@@ -46,16 +59,14 @@ describe('Telegram registration webhook (e2e)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ ok: true, result: { message_id: 1 } }),
+    postTelegramMock.mockResolvedValue({
+      statusCode: 200,
+      payload: { ok: true, result: { message_id: 1 } },
     });
-    vi.stubGlobal('fetch', fetchMock);
     usersRepository.findByPhone.mockResolvedValue(null);
   });
 
   afterAll(async () => {
-    vi.unstubAllGlobals();
     await app.close();
   });
 
@@ -79,9 +90,7 @@ describe('Telegram registration webhook (e2e)', () => {
       },
     }).expect(200, { ok: true });
 
-    const telegramBody = JSON.parse(
-      fetchMock.mock.calls[0][1].body as string,
-    );
+    const telegramBody = postTelegramMock.mock.calls[0][2];
     expect(telegramBody.reply_markup).toEqual({
       keyboard: [
         [{ text: '📱 Telefon raqamni yuborish', request_contact: true }],
@@ -125,6 +134,6 @@ describe('Telegram registration webhook (e2e)', () => {
       .value as { role: UserRole; phoneVerifiedAt: Date };
     expect(stored.role).toBe(UserRole.CUSTOMER);
     expect(stored.phoneVerifiedAt).toBeInstanceOf(Date);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(postTelegramMock).toHaveBeenCalledTimes(2);
   });
 });

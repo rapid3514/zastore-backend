@@ -1,25 +1,43 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import {
+  AuditAction,
+  AuditEntityType,
+  ProductMediaType,
+  TelegramProductSyncStatus,
+} from '../../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
+import {
+  MediaService,
+  type VerifiedMediaAsset,
+} from '../media/media.service.js';
 import type { CreateProductDto } from './dto/create-product.dto.js';
+import type { ProductMediaDto } from './dto/product-media.dto.js';
 import type { QueryProductsDto } from './dto/query-products.dto.js';
 import type { UpdateProductDto } from './dto/update-product.dto.js';
-import { ProductsRepository, type ProductData } from './products.repository.js';
+import { ProductTelegramPublisherService } from './product-telegram-publisher.service.js';
+import {
+  ProductsRepository,
+  type ProductData,
+  type ProductMediaData,
+} from './products.repository.js';
 
 const productNotFound = () =>
   new NotFoundException({
     error: 'PRODUCT_NOT_FOUND',
     message: 'Mahsulot topilmadi',
   });
-
 const categoryNotFound = () =>
   new NotFoundException({
     error: 'CATEGORY_NOT_FOUND',
     message: 'Kategoriya topilmadi',
   });
-
 const categoryInactive = () =>
   new BadRequestException({
     error: 'CATEGORY_INACTIVE',
@@ -29,16 +47,27 @@ const categoryInactive = () =>
 type ProductRecord = NonNullable<
   Awaited<ReturnType<ProductsRepository['findById']>>
 >;
+type PublicProductRecord = NonNullable<
+  Awaited<ReturnType<ProductsRepository['findPublicById']>>
+>;
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly productsRepository: ProductsRepository) {}
+  private readonly logger = new Logger(ProductsService.name);
+
+  constructor(
+    private readonly productsRepository: ProductsRepository,
+    @Optional() private readonly auditService?: AuditService,
+    @Optional() private readonly mediaService?: MediaService,
+    @Optional()
+    private readonly telegramPublisher?: ProductTelegramPublisherService,
+  ) {}
 
   async findPublic(query: QueryProductsDto) {
     if (query.isActive === false) return this.paginate([], 0, query);
     const { data, total } = await this.productsRepository.list(query, false);
     return this.paginate(
-      data.map((product) => this.toResponse(product)),
+      data.map((product) => this.toPublicResponse(product)),
       total,
       query,
     );
@@ -47,7 +76,7 @@ export class ProductsService {
   async findForAdmin(query: QueryProductsDto) {
     const { data, total } = await this.productsRepository.list(query, true);
     return this.paginate(
-      data.map((product) => this.toResponse(product)),
+      data.map((product) => this.toAdminResponse(product)),
       total,
       query,
     );
@@ -56,54 +85,193 @@ export class ProductsService {
   async findOnePublic(id: string) {
     const product = await this.productsRepository.findPublicById(id);
     if (!product) throw productNotFound();
-    return this.toResponse(product);
+    return this.toPublicResponse(product);
   }
 
   async findOneForAdmin(id: string) {
     const product = await this.productsRepository.findById(id);
     if (!product) throw productNotFound();
-    return this.toResponse(product);
+    return this.toAdminResponse(product);
   }
 
-  async create(dto: CreateProductDto) {
+  async create(dto: CreateProductDto, actorUserId?: string) {
+    this.assertExclusiveInputs(dto.image, dto.media);
     await this.ensureCategory(dto.categoryId);
+    const requestedMedia = dto.media?.length ? dto.media : undefined;
+    if (requestedMedia) this.validateMediaSet(requestedMedia);
+    const media = requestedMedia
+      ? await this.verifyNewMedia(requestedMedia)
+      : [];
+    const legacyImage =
+      !requestedMedia && dto.image
+        ? await this.getMediaService().verifyProductImage(dto.image)
+        : undefined;
+    const primaryImage = media.find(
+      (item) => item.type === ProductMediaType.IMAGE,
+    );
     const data: ProductData = {
       name: dto.name.trim(),
       description: this.optionalText(dto.description),
       price: dto.price,
-      imageUrl: dto.imageUrl ?? null,
+      imageUrl: primaryImage?.url ?? legacyImage?.url ?? null,
+      imageFileId: primaryImage?.fileId ?? legacyImage?.fileId ?? null,
       categoryId: dto.categoryId,
       isAvailable: dto.isAvailable ?? true,
       isActive: dto.isActive ?? true,
+      telegramSyncStatus: TelegramProductSyncStatus.PENDING,
     };
+
     try {
-      return this.toResponse(await this.productsRepository.create(data));
+      let product = media.length
+        ? await this.productsRepository.createWithMedia(data, media)
+        : await this.productsRepository.create(data);
+      if (actorUserId) {
+        await this.auditService?.log({
+          actorUserId,
+          action: AuditAction.PRODUCT_CREATE,
+          entityType: AuditEntityType.PRODUCT,
+          entityId: product.id,
+          metadata: {
+            name: product.name,
+            categoryId: product.categoryId,
+            mediaAdded: media.map((item) => ({
+              type: item.type,
+              fileId: item.fileId,
+            })),
+          },
+        });
+      }
+      if (this.hasMedia(product) && this.telegramPublisher) {
+        product = await this.telegramPublisher.syncAfterCreate(product);
+      }
+      return this.toAdminResponse(product);
     } catch (error) {
       if (this.isPrismaError(error, 'P2003')) throw categoryNotFound();
       throw error;
     }
   }
 
-  async update(id: string, dto: UpdateProductDto) {
+  async update(id: string, dto: UpdateProductDto, actorUserId?: string) {
+    this.assertExclusiveInputs(dto.image, dto.media);
     const existing = await this.productsRepository.findById(id);
     if (!existing) throw productNotFound();
-    if (dto.categoryId !== undefined) {
-      await this.ensureCategory(dto.categoryId);
-    }
+    if (dto.categoryId !== undefined) await this.ensureCategory(dto.categoryId);
+
     const data: Partial<ProductData> = {};
     if (dto.name !== undefined) data.name = dto.name.trim();
-    if (dto.description !== undefined) {
+    if (dto.description !== undefined)
       data.description = this.optionalText(dto.description);
-    }
     if (dto.price !== undefined) data.price = dto.price;
-    if (dto.imageUrl !== undefined) data.imageUrl = dto.imageUrl;
     if (dto.categoryId !== undefined) data.categoryId = dto.categoryId;
     if (dto.isAvailable !== undefined) data.isAvailable = dto.isAvailable;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
-    if (!Object.keys(data).length) return this.toResponse(existing);
 
+    const oldMedia = existing.media ?? [];
+    let mediaChanged = false;
+    let newMedia: ProductMediaData[] | undefined;
+    let removedFileIds: string[] = [];
+
+    if (dto.media !== undefined && !dto.image) {
+      this.validateMediaSet(dto.media);
+      newMedia = await this.resolveUpdatedMedia(dto.media, oldMedia);
+      mediaChanged =
+        !this.sameMediaSet(oldMedia, newMedia) ||
+        Boolean(existing.imageUrl && oldMedia.length === 0);
+      if (mediaChanged) {
+        const retained = new Set(newMedia.map((item) => item.fileId));
+        removedFileIds = oldMedia
+          .filter((item) => !retained.has(item.fileId))
+          .map((item) => item.fileId);
+        if (existing.imageFileId && !retained.has(existing.imageFileId)) {
+          removedFileIds.push(existing.imageFileId);
+        }
+        const primaryImage = newMedia.find(
+          (item) => item.type === ProductMediaType.IMAGE,
+        );
+        data.imageUrl = primaryImage?.url ?? null;
+        data.imageFileId = primaryImage?.fileId ?? null;
+      }
+    } else if (dto.image) {
+      const verified = await this.getMediaService().verifyProductImage(
+        dto.image,
+      );
+      const legacyChanged =
+        verified.fileId !== existing.imageFileId ||
+        verified.url !== existing.imageUrl;
+      mediaChanged = legacyChanged || oldMedia.length > 0;
+      data.imageUrl = verified.url;
+      data.imageFileId = verified.fileId;
+      if (oldMedia.length) {
+        newMedia = [];
+        removedFileIds = oldMedia.map((item) => item.fileId);
+      } else if (legacyChanged && existing.imageFileId) {
+        removedFileIds = [existing.imageFileId];
+      }
+    }
+
+    if (!Object.keys(data).length && !mediaChanged)
+      return this.toAdminResponse(existing);
     try {
-      return this.toResponse(await this.productsRepository.update(id, data));
+      let product =
+        newMedia !== undefined && mediaChanged
+          ? await this.productsRepository.replaceMedia(id, data, newMedia)
+          : await this.productsRepository.update(id, data);
+
+      if (actorUserId) {
+        const oldKeys = oldMedia.map(
+          (item) => `${item.type}:${item.fileId}:${item.position}`,
+        );
+        const newKeys = (newMedia ?? oldMedia).map(
+          (item) => `${item.type}:${item.fileId}:${item.position}`,
+        );
+        const added = (newMedia ?? []).filter(
+          (item) => !oldMedia.some((old) => old.fileId === item.fileId),
+        );
+        const metadata: Record<string, unknown> = { fields: Object.keys(data) };
+        if (dto.image && mediaChanged) {
+          metadata.oldImageFileId = existing.imageFileId;
+          metadata.newImageFileId = data.imageFileId;
+        } else if (newMedia !== undefined) {
+          metadata.mediaAdded = added.map((item) => ({
+            type: item.type,
+            fileId: item.fileId,
+          }));
+          metadata.mediaRemoved = removedFileIds;
+          metadata.mediaReordered =
+            mediaChanged && oldKeys.join('|') !== newKeys.join('|');
+          metadata.videoChanged =
+            mediaChanged &&
+            (oldMedia.some((item) => item.type === ProductMediaType.VIDEO) ||
+              (newMedia ?? []).some(
+                (item) => item.type === ProductMediaType.VIDEO,
+              ));
+        }
+        await this.auditService?.log({
+          actorUserId,
+          action: Object.keys(data).every((key) =>
+            ['isActive', 'isAvailable'].includes(key),
+          )
+            ? AuditAction.PRODUCT_STATUS_CHANGE
+            : AuditAction.PRODUCT_UPDATE,
+          entityType: AuditEntityType.PRODUCT,
+          entityId: id,
+          metadata,
+        });
+      }
+
+      if (this.telegramPublisher) {
+        if (this.hasMedia(product)) {
+          product = await this.telegramPublisher.syncAfterUpdate(
+            product,
+            mediaChanged,
+          );
+        } else if (mediaChanged) {
+          await this.telegramPublisher.removeProductPostsBestEffort(product);
+        }
+      }
+      for (const fileId of new Set(removedFileIds))
+        await this.cleanupMedia(fileId);
+      return this.toAdminResponse(product);
     } catch (error) {
       if (this.isPrismaError(error, 'P2003')) throw categoryNotFound();
       if (this.isPrismaError(error, 'P2025')) throw productNotFound();
@@ -111,32 +279,364 @@ export class ProductsService {
     }
   }
 
-  async remove(id: string): Promise<void> {
+  async syncTelegram(
+    id: string,
+    forceRepublish: boolean,
+    actorUserId?: string,
+  ) {
     const product = await this.productsRepository.findById(id);
     if (!product) throw productNotFound();
+    if (!this.telegramPublisher) {
+      throw new ServiceUnavailableException('Telegram publisher unavailable');
+    }
+    try {
+      const synced = await this.telegramPublisher.syncManually(
+        product,
+        forceRepublish,
+      );
+      await this.auditTelegramSync(actorUserId, id, {
+        success: true,
+        forceRepublish,
+      });
+      return this.toAdminResponse(synced);
+    } catch (error) {
+      await this.auditTelegramSync(actorUserId, id, {
+        success: false,
+        forceRepublish,
+      });
+      throw error;
+    }
+  }
 
+  async remove(id: string, actorUserId?: string): Promise<void> {
+    const product = await this.productsRepository.findById(id);
+    if (!product) throw productNotFound();
     try {
       if ((await this.productsRepository.countOrderItems(id)) > 0) {
+        let inactiveProduct = product;
         if (product.isActive || product.isAvailable) {
-          await this.productsRepository.update(id, {
+          inactiveProduct = await this.productsRepository.update(id, {
             isActive: false,
             isAvailable: false,
           });
         }
+        if (this.telegramPublisher) {
+          await this.telegramPublisher.removeProductPostsBestEffort(
+            inactiveProduct,
+          );
+        }
+        if (actorUserId) await this.logDelete(actorUserId, id, true);
         return;
       }
 
+      const fileIds = new Set((product.media ?? []).map((item) => item.fileId));
+      if (product.imageFileId) fileIds.add(product.imageFileId);
       await this.productsRepository.delete(id);
+      if (this.telegramPublisher) {
+        const publisher = this
+          .telegramPublisher as ProductTelegramPublisherService & {
+          deleteProductPostsBestEffort?: (
+            value: ProductRecord,
+          ) => Promise<void>;
+        };
+        if (publisher.deleteProductPostsBestEffort) {
+          await publisher.deleteProductPostsBestEffort(product);
+        } else {
+          await this.telegramPublisher.deletePostBestEffort(
+            product.telegramChannelMessageId,
+          );
+        }
+      }
+      for (const fileId of fileIds) await this.cleanupMedia(fileId);
+      if (actorUserId) await this.logDelete(actorUserId, id, false);
     } catch (error) {
       if (this.isPrismaError(error, 'P2025')) throw productNotFound();
       throw error;
     }
+  }
+
+  private validateMediaSet(media: ProductMediaDto[]): void {
+    const imageCount = media.filter(
+      (item) => item.type === ProductMediaType.IMAGE,
+    ).length;
+    const videoCount = media.filter(
+      (item) => item.type === ProductMediaType.VIDEO,
+    ).length;
+    if (imageCount > 5) {
+      throw new BadRequestException(
+        'Bir mahsulotga maksimal 5 ta rasm qo‘shish mumkin.',
+      );
+    }
+    if (videoCount > 1) {
+      throw new BadRequestException(
+        'Bir mahsulotga maksimal 1 ta video qo‘shish mumkin.',
+      );
+    }
+    if (media.length > 6) {
+      throw new BadRequestException(
+        'Bir mahsulotga maksimal 6 ta media qo‘shish mumkin.',
+      );
+    }
+    const fileIds = media.map((item) => item.fileId.trim());
+    if (new Set(fileIds).size !== fileIds.length) {
+      throw new BadRequestException(
+        'Bir xil fileId bir requestda takrorlanmasligi kerak.',
+      );
+    }
+    for (const type of [ProductMediaType.IMAGE, ProductMediaType.VIDEO]) {
+      const positions = media
+        .filter((item) => item.type === type)
+        .map((item) => item.position)
+        .sort((a, b) => a - b);
+      if (positions.some((position, index) => position !== index)) {
+        throw new BadRequestException(
+          'Media position qiymatlari 0 dan ketma-ket bo‘lishi kerak.',
+        );
+      }
+    }
+  }
+
+  private assertExclusiveInputs(
+    image: CreateProductDto['image'],
+    media: CreateProductDto['media'],
+  ): void {
+    if (image && media?.length) {
+      throw new BadRequestException(
+        '`image` va `media` bir requestda birga yuborilmasligi kerak.',
+      );
+    }
+  }
+
+  private async verifyNewMedia(
+    media: ProductMediaDto[],
+  ): Promise<ProductMediaData[]> {
+    const verified = await Promise.all(
+      media.map((item) => this.getMediaService().verifyProductMedia(item)),
+    );
+    return this.toMediaData(media, verified);
+  }
+
+  private async resolveUpdatedMedia(
+    requested: ProductMediaDto[],
+    existing: ProductRecord['media'],
+  ): Promise<ProductMediaData[]> {
+    const existingByFileId = new Map(
+      existing.map((item) => [item.fileId, item]),
+    );
+    const resolved = await Promise.all(
+      requested.map(async (item): Promise<ProductMediaData> => {
+        const stored = existingByFileId.get(item.fileId);
+        if (stored) {
+          if (stored.type !== item.type || (item.id && item.id !== stored.id)) {
+            throw new BadRequestException(
+              'Existing media identifikatori yoki turi mos emas.',
+            );
+          }
+          return {
+            type: stored.type,
+            fileId: stored.fileId,
+            url: stored.url,
+            position: item.position,
+            mimeType: stored.mimeType,
+            width: stored.width,
+            height: stored.height,
+          };
+        }
+        const verified = await this.getMediaService().verifyProductMedia(item);
+        return this.mediaData(item, verified);
+      }),
+    );
+    return this.sortMedia(resolved);
+  }
+
+  private toMediaData(
+    requested: ProductMediaDto[],
+    verified: VerifiedMediaAsset[],
+  ): ProductMediaData[] {
+    return this.sortMedia(
+      requested.map((item, index) => this.mediaData(item, verified[index])),
+    );
+  }
+
+  private mediaData(
+    item: ProductMediaDto,
+    verified: VerifiedMediaAsset,
+  ): ProductMediaData {
+    return {
+      type: verified.type,
+      fileId: verified.fileId,
+      url: verified.url,
+      position: item.position,
+      mimeType: verified.mime,
+      width: verified.width,
+      height: verified.height,
+    };
+  }
+
+  private sortMedia<T extends { type: ProductMediaType; position: number }>(
+    media: T[],
+  ): T[] {
+    return [...media].sort((a, b) =>
+      a.type === b.type
+        ? a.position - b.position
+        : a.type === ProductMediaType.IMAGE
+          ? -1
+          : 1,
+    );
+  }
+
+  private sameMediaSet(
+    existing: ProductRecord['media'],
+    requested: ProductMediaData[],
+  ): boolean {
+    const oldSet = this.sortMedia(existing).map(
+      (item) => `${item.type}:${item.fileId}:${item.position}:${item.url}`,
+    );
+    const newSet = this.sortMedia(requested).map(
+      (item) => `${item.type}:${item.fileId}:${item.position}:${item.url}`,
+    );
+    return (
+      oldSet.length === newSet.length &&
+      oldSet.every((value, index) => value === newSet[index])
+    );
+  }
+
+  private hasMedia(product: {
+    media?: unknown[];
+    imageUrl: string | null;
+  }): boolean {
+    return Boolean(product.media?.length || product.imageUrl);
+  }
+
+  private publicMedia(product: PublicProductRecord | ProductRecord) {
+    if (product.media?.length) {
+      return this.sortMedia(product.media).map((item) => ({
+        id: item.id,
+        type: item.type,
+        url: item.url,
+        position: item.position,
+      }));
+    }
+    return product.imageUrl
+      ? [
+          {
+            id: null,
+            type: ProductMediaType.IMAGE,
+            url: product.imageUrl,
+            position: 0,
+          },
+        ]
+      : [];
+  }
+
+  private toPublicResponse(product: PublicProductRecord | ProductRecord) {
+    return {
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price.toFixed(2),
+      imageUrl: product.imageUrl,
+      media: this.publicMedia(product),
+      categoryId: product.categoryId,
+      category: product.category,
+      isAvailable: product.isAvailable,
+      isActive: product.isActive,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
+    };
+  }
+
+  private toAdminResponse(product: ProductRecord) {
+    const media = product.media?.length
+      ? this.sortMedia(product.media).map((item) => ({
+          id: item.id,
+          type: item.type,
+          fileId: item.fileId,
+          url: item.url,
+          position: item.position,
+          mimeType: item.mimeType,
+          width: item.width,
+          height: item.height,
+        }))
+      : product.imageUrl
+        ? [
+            {
+              id: null,
+              type: ProductMediaType.IMAGE,
+              fileId: product.imageFileId,
+              url: product.imageUrl,
+              position: 0,
+              mimeType: null,
+              width: null,
+              height: null,
+            },
+          ]
+        : [];
+    return {
+      ...this.toPublicResponse(product),
+      media,
+      imageFileId: product.imageFileId,
+      telegramChannelMessageId: product.telegramChannelMessageId,
+      telegramButtonMessageId: product.telegramButtonMessageId,
+      telegramMessageIds: (product.telegramMessages ?? [])
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((item) => item.messageId),
+      telegramSyncStatus: product.telegramSyncStatus,
+      telegramPublishedAt: product.telegramPublishedAt,
+      telegramSyncedAt: product.telegramSyncedAt,
+    };
+  }
+
+  private auditTelegramSync(
+    actorUserId: string | undefined,
+    entityId: string,
+    telegramSyncResult: Record<string, unknown>,
+  ) {
+    if (!actorUserId) return Promise.resolve();
+    return (
+      this.auditService?.log({
+        actorUserId,
+        action: AuditAction.PRODUCT_UPDATE,
+        entityType: AuditEntityType.PRODUCT,
+        entityId,
+        metadata: { telegramSyncResult },
+      }) ?? Promise.resolve()
+    );
+  }
+
+  private logDelete(
+    actorUserId: string,
+    entityId: string,
+    softDelete: boolean,
+  ) {
+    return this.auditService?.log({
+      actorUserId,
+      action: AuditAction.PRODUCT_DELETE,
+      entityType: AuditEntityType.PRODUCT,
+      entityId,
+      metadata: { softDelete },
+    });
   }
 
   private async ensureCategory(id: string): Promise<void> {
     const category = await this.productsRepository.findCategoryById(id);
     if (!category) throw categoryNotFound();
     if (!category.isActive) throw categoryInactive();
+  }
+
+  private getMediaService(): MediaService {
+    if (!this.mediaService)
+      throw new ServiceUnavailableException('Media service unavailable');
+    return this.mediaService;
+  }
+
+  private async cleanupMedia(fileId: string): Promise<void> {
+    try {
+      await this.mediaService?.deleteImageIfUnreferenced(fileId);
+    } catch {
+      this.logger.warn('ImageKit asset cleanup failed after product commit');
+    }
   }
 
   private optionalText(value: string | null | undefined): string | null {
@@ -150,22 +650,6 @@ export class ProductsService {
     return {
       data,
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
-    };
-  }
-
-  private toResponse(product: ProductRecord) {
-    return {
-      id: product.id,
-      name: product.name,
-      description: product.description,
-      price: product.price.toFixed(2),
-      imageUrl: product.imageUrl,
-      categoryId: product.categoryId,
-      category: product.category,
-      isAvailable: product.isAvailable,
-      isActive: product.isActive,
-      createdAt: product.createdAt,
-      updatedAt: product.updatedAt,
     };
   }
 

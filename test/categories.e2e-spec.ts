@@ -227,4 +227,12 @@ describe('CategoriesController (e2e)', () => {
       .send({ name: 'Burgerlar', slug: 'frontend-slug', isActive: false })
       .expect(400);
   });
+
+  it.each(['', '   '])('rejects an empty category name', async (name) => {
+    await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', authorization(adminId, UserRole.ADMIN))
+      .send({ name })
+      .expect(400);
+  });
 });

@@ -1,9 +1,20 @@
-import { Body, Controller, Get, Patch, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  ParseArrayPipe,
+  Patch,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import type { AuthenticatedUser } from '../../common/types/auth-user.type.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../../common/guards/roles.guard.js';
 import { UserRole } from '../../generated/prisma/client.js';
 import { WorkHoursService } from './work-hours.service.js';
+import { WorkHourEntryDto } from './dto/work-hour-entry.dto.js';
 
 @Controller('work-hours')
 export class WorkHoursController {
@@ -19,21 +30,23 @@ export class WorkHoursController {
   @Put('manage')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  updateManageSchedule(@Body() body: Array<{ dayOfWeek: string; isOpen: boolean; openTime?: string | null; closeTime?: string | null }>) {
-    const entries = body.map((entry) => ({
-      dayOfWeek: entry.dayOfWeek as any,
-      isOpen: entry.isOpen,
-      openTime: entry.openTime ?? null,
-      closeTime: entry.closeTime ?? null,
-    }));
-    return this.workHoursService.updateSchedule(entries);
+  updateManageSchedule(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body(new ParseArrayPipe({ items: WorkHourEntryDto }))
+    body: WorkHourEntryDto[],
+  ) {
+    return this.workHoursService.updateSchedule(body, actor.sub);
   }
 
   @Patch('manage')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  patchManageSchedule(@Body() body: Array<{ dayOfWeek: string; isOpen: boolean; openTime?: string | null; closeTime?: string | null }>) {
-    return this.updateManageSchedule(body);
+  patchManageSchedule(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body(new ParseArrayPipe({ items: WorkHourEntryDto }))
+    body: WorkHourEntryDto[],
+  ) {
+    return this.workHoursService.updateSchedule(body, actor.sub);
   }
 
   @Get('status')

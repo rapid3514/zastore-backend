@@ -6,9 +6,14 @@ import { UsersModule } from '../users/users.module.js';
 import { WorkHoursController } from './work-hours.controller.js';
 import { WorkHoursRepository } from './work-hours.repository.js';
 import { WorkHoursService } from './work-hours.service.js';
+import { AuditModule } from '../audit/audit.module.js';
 
 @Module({
-  imports: [UsersModule, PassportModule.register({ defaultStrategy: 'jwt' })],
+  imports: [
+    UsersModule,
+    AuditModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+  ],
   controllers: [WorkHoursController],
   providers: [WorkHoursRepository, WorkHoursService, JwtAuthGuard, RolesGuard],
   exports: [WorkHoursService],

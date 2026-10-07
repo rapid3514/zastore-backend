@@ -74,9 +74,7 @@ describe('AuthService', () => {
       phoneVerifiedAt: null,
     });
 
-    await expect(
-      service.authenticateCustomer('init-data'),
-    ).resolves.toEqual({
+    await expect(service.authenticateCustomer('init-data')).resolves.toEqual({
       body: { registered: false, registrationRequired: true },
     });
   });
@@ -88,9 +86,7 @@ describe('AuthService', () => {
       phoneVerifiedAt: null,
     });
 
-    await expect(
-      service.authenticateCustomer('init-data'),
-    ).resolves.toEqual({
+    await expect(service.authenticateCustomer('init-data')).resolves.toEqual({
       body: { registered: false, registrationRequired: true },
     });
   });
@@ -191,5 +187,51 @@ describe('AuthService', () => {
     await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+  });
+
+  it('revokes a matching refresh session on logout', async () => {
+    const { service, repository, tokens } = createService();
+    const refreshToken = 'valid-refresh-token';
+    tokens.verifyRefresh.mockResolvedValue({
+      sid: 'session-id',
+      sub: activeUser.id,
+      telegramId: '123',
+      role: UserRole.CUSTOMER,
+    });
+    repository.findRefreshSession.mockResolvedValue({
+      id: 'session-id',
+      tokenHash: await argon2.hash(refreshToken),
+      userId: activeUser.id,
+      revokedAt: null,
+    });
+
+    await service.logout(refreshToken);
+
+    expect(repository.revokeRefreshSession).toHaveBeenCalledWith('session-id');
+  });
+
+  it('returns the current safe user and rejects a missing user', async () => {
+    const { service, users } = createService();
+    users.findById.mockResolvedValue(activeUser);
+
+    const result = await service.me({
+      sub: activeUser.id,
+      telegramId: '123',
+      role: UserRole.CUSTOMER,
+    });
+    expect(result.user).toMatchObject({
+      id: activeUser.id,
+      role: UserRole.CUSTOMER,
+    });
+    expect(result.user).not.toHaveProperty('tokenHash');
+
+    users.findById.mockResolvedValue(null);
+    await expect(
+      service.me({
+        sub: activeUser.id,
+        telegramId: '123',
+        role: UserRole.CUSTOMER,
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

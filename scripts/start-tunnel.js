@@ -3,7 +3,7 @@ import 'dotenv/config';
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
 const backendPublicUrl = process.env.BACKEND_PUBLIC_URL;
-const webhookPath = '/api/v1/telegram/webhook';
+const webhookPath = 'https://has-disclaimer-harvest-call.trycloudflare.com/api/v1/telegram/webhook';
 
 function required(value, name) {
   if (value) return value;

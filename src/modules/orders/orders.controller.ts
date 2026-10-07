@@ -90,28 +90,33 @@ export class OrdersController {
   @Patch(':id/confirm')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  confirm(@Param('id', ParseUUIDPipe) id: string) {
-    return this.ordersService.confirmOrder(id);
+  confirm(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.ordersService.confirmOrder(id, actor.sub);
   }
 
   @Patch(':id/reject')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   reject(
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() input: OrderReasonDto,
   ) {
-    return this.ordersService.rejectOrder(id, input.reason);
+    return this.ordersService.rejectOrder(id, input.reason, actor.sub);
   }
 
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   status(
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() input: UpdateOrderStatusDto,
   ) {
-    return this.ordersService.updateOrderStatus(id, input.status);
+    return this.ordersService.updateOrderStatus(id, input.status, actor.sub);
   }
 
   @Get(':id')
