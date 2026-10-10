@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { UserRole, type User } from '../../generated/prisma/client.js';
 import { describe, expect, it, vi } from 'vitest';
 import { AdminsService } from './admins.service.js';
@@ -20,6 +20,7 @@ function user(id: string, role: UserRole, isBlocked = false): User {
     avatarUrl: null,
     role,
     isBlocked,
+    lastSeenAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -57,7 +58,7 @@ describe('AdminsService', () => {
       id: customerId,
       role: UserRole.ADMIN,
     });
-    expect(repository.setRole).toHaveBeenCalledWith(customerId, UserRole.ADMIN);
+    expect(repository.setRole).toHaveBeenCalledWith(customerId, UserRole.ADMIN, UserRole.CUSTOMER, false);
   });
 
   it.each([UserRole.ADMIN, UserRole.CUSTOMER])(
@@ -81,6 +82,8 @@ describe('AdminsService', () => {
     expect(repository.setRole).toHaveBeenCalledWith(
       adminId,
       UserRole.CUSTOMER,
+      UserRole.ADMIN,
+      false,
     );
   });
 
@@ -103,7 +106,7 @@ describe('AdminsService', () => {
     await expect(service.block(superAdminId, adminId)).resolves.toMatchObject({
       isBlocked: true,
     });
-    expect(repository.setBlocked).toHaveBeenCalledWith(adminId, true);
+    expect(repository.setBlocked).toHaveBeenCalledWith(adminId, true, false);
   });
 
   it('unblocks a blocked ADMIN', async () => {
@@ -113,7 +116,7 @@ describe('AdminsService', () => {
     await expect(service.unblock(superAdminId, adminId)).resolves.toMatchObject({
       isBlocked: false,
     });
-    expect(repository.setBlocked).toHaveBeenCalledWith(adminId, false);
+    expect(repository.setBlocked).toHaveBeenCalledWith(adminId, false, true);
   });
 
   it('does not block another SUPER_ADMIN', async () => {
@@ -121,6 +124,12 @@ describe('AdminsService', () => {
     await expect(
       service.block(superAdminId, otherSuperAdminId),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('reports a concurrent admin role change as a conflict', async () => {
+    const { service, repository } = createService();
+    repository.setBlocked.mockRejectedValueOnce({ code: 'P2025' });
+    await expect(service.block(superAdminId, adminId)).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('does not promote a SUPER_ADMIN', async () => {

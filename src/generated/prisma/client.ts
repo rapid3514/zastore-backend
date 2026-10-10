@@ -57,6 +57,11 @@ export type Category = Prisma.CategoryModel
  */
 export type Product = Prisma.ProductModel
 /**
+ * Model MediaAsset
+ * 
+ */
+export type MediaAsset = Prisma.MediaAssetModel
+/**
  * Model ProductMedia
  * 
  */
@@ -71,6 +76,11 @@ export type ProductTelegramMessage = Prisma.ProductTelegramMessageModel
  * 
  */
 export type Order = Prisma.OrderModel
+/**
+ * Model NotificationOutbox
+ * 
+ */
+export type NotificationOutbox = Prisma.NotificationOutboxModel
 /**
  * Model Payment
  * 

@@ -2,45 +2,101 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
-    env_file: .env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      DATABASE_URL: ${DATABASE_URL:?Set production DATABASE_URL in .env}
+    entrypoint: ['/bin/sh', '/opt/postgres-entrypoint.sh']
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/postgres-entrypoint.sh:/opt/postgres-entrypoint.sh:ro
+    networks:
+      - data_network
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1']
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command:
+      - redis-server
+      - --save
+      - ''
+      - --appendonly
+      - 'no'
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - noeviction
+    networks:
+      - data_network
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 10
 
-  backend:
-    build: .
-    env_file: .env
+  migrate:
+    build:
+      context: .
+      target: migration
+    env_file:
+      - .env
     environment:
-      PORT: 3000
-      DATABASE_URL: ${DATABASE_URL_DOCKER}
-      REDIS_URL: ${REDIS_URL_DOCKER}
-    ports:
-      - '3000:3000'
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set production DATABASE_URL in .env}
+      REDIS_URL: ${REDIS_URL:?Set production REDIS_URL in .env}
+      TRUST_PROXY_CIDRS: 172.30.0.1/32
+    networks:
+      - data_network
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: 'no'
+
+  backend:
+    build:
+      context: .
+      target: production
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:?Set production DATABASE_URL in .env}
+      REDIS_URL: ${REDIS_URL:?Set production REDIS_URL in .env}
+      TRUST_PROXY_CIDRS: 172.30.0.1/32
+    ports:
+      - '127.0.0.1:3000:3000'
+    networks:
+      - edge_network
+      - data_network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  edge_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  data_network:
+    driver: bridge
+    internal: true
 
 volumes:
   postgres_data:

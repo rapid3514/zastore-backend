@@ -28,6 +28,8 @@ function createService(overrides: Record<string, unknown> = {}) {
     createRefreshSession: vi.fn(),
     findRefreshSession: vi.fn(),
     revokeRefreshSession: vi.fn(),
+    rotateRefreshSession: vi.fn().mockResolvedValue(true),
+    revokeRefreshFamily: vi.fn(),
   };
   const telegram = { verify: vi.fn().mockReturnValue({ id: 123n }) };
   const tokens = {
@@ -144,12 +146,14 @@ describe('AuthService', () => {
     const token = 'valid-refresh-token';
     tokens.verifyRefresh.mockResolvedValue({
       sid: 'session-id',
+      fid: 'family-id',
       sub: activeUser.id,
       telegramId: '123',
       role: UserRole.CUSTOMER,
     });
     repository.findRefreshSession.mockResolvedValue({
       id: 'session-id',
+      familyId: 'family-id',
       tokenHash: await argon2.hash(token),
       userId: activeUser.id,
       revokedAt: null,
@@ -160,8 +164,15 @@ describe('AuthService', () => {
     await expect(service.refresh(token)).resolves.toMatchObject({
       body: { accessToken: 'access-token' },
     });
-    expect(repository.revokeRefreshSession).toHaveBeenCalledWith('session-id');
-    expect(repository.createRefreshSession).toHaveBeenCalledOnce();
+    expect(repository.rotateRefreshSession).toHaveBeenCalledWith(
+      'session-id',
+      expect.objectContaining({
+        familyId: 'family-id',
+        parentId: 'session-id',
+        userId: activeUser.id,
+      }),
+    );
+    expect(repository.createRefreshSession).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -174,12 +185,14 @@ describe('AuthService', () => {
     const { service, repository, tokens } = createService();
     tokens.verifyRefresh.mockResolvedValue({
       sid: 'session-id',
+      fid: 'family-id',
       sub: activeUser.id,
       telegramId: '123',
       role: UserRole.CUSTOMER,
     });
     repository.findRefreshSession.mockResolvedValue({
       id: 'session-id',
+      familyId: 'family-id',
       tokenHash: await argon2.hash('refresh-token'),
       userId: activeUser.id,
       ...state,
@@ -194,12 +207,14 @@ describe('AuthService', () => {
     const refreshToken = 'valid-refresh-token';
     tokens.verifyRefresh.mockResolvedValue({
       sid: 'session-id',
+      fid: 'family-id',
       sub: activeUser.id,
       telegramId: '123',
       role: UserRole.CUSTOMER,
     });
     repository.findRefreshSession.mockResolvedValue({
       id: 'session-id',
+      familyId: 'family-id',
       tokenHash: await argon2.hash(refreshToken),
       userId: activeUser.id,
       revokedAt: null,
@@ -207,7 +222,137 @@ describe('AuthService', () => {
 
     await service.logout(refreshToken);
 
-    expect(repository.revokeRefreshSession).toHaveBeenCalledWith('session-id');
+    expect(repository.revokeRefreshFamily).toHaveBeenCalledWith('family-id', activeUser.id);
+  });
+
+  it('revokes the replacement when logout races with refresh rotation', async () => {
+    const { service, repository, tokens } = createService();
+    const refreshToken = 'consumed-refresh-token';
+    tokens.verifyRefresh.mockResolvedValue({ sid: 'session-id', fid: 'family-id', sub: activeUser.id });
+    repository.findRefreshSession.mockResolvedValue({
+      id: 'session-id', familyId: 'family-id', userId: activeUser.id,
+      tokenHash: await argon2.hash(refreshToken), revokedAt: new Date(),
+    });
+
+    await service.logout(refreshToken);
+
+    expect(repository.revokeRefreshFamily).toHaveBeenCalledWith('family-id', activeUser.id);
+  });
+
+  it('revokes every active family session when a previously consumed token is replayed', async () => {
+    const { service, repository, tokens } = createService();
+    tokens.verifyRefresh.mockResolvedValue({
+      sid: 'session-id',
+      fid: 'family-id',
+      sub: activeUser.id,
+    });
+    repository.findRefreshSession.mockResolvedValue({
+      id: 'session-id',
+      familyId: 'family-id',
+      userId: activeUser.id,
+      tokenHash: await argon2.hash('refresh-token'),
+      revokedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(repository.revokeRefreshFamily).toHaveBeenCalledWith(
+      'family-id',
+      activeUser.id,
+    );
+    expect(repository.rotateRefreshSession).not.toHaveBeenCalled();
+  });
+
+  it('allows exactly one parallel consume and preserves its replacement when the loser observed an active token', async () => {
+    const { service, users, repository, tokens } = createService();
+    const tokenHash = await argon2.hash('refresh-token');
+    tokens.verifyRefresh.mockResolvedValue({
+      sid: 'session-id',
+      fid: 'family-id',
+      sub: activeUser.id,
+    });
+    repository.findRefreshSession.mockResolvedValue({
+      id: 'session-id',
+      familyId: 'family-id',
+      userId: activeUser.id,
+      tokenHash,
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    users.findById.mockResolvedValue(activeUser);
+    let consumed = false;
+    repository.rotateRefreshSession.mockImplementation(() => {
+      if (consumed) return Promise.resolve(false);
+      consumed = true;
+      return Promise.resolve(true);
+    });
+    const results = await Promise.allSettled([
+      service.refresh('refresh-token'),
+      service.refresh('refresh-token'),
+    ]);
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    const rejected = results.find((result) => result.status === 'rejected');
+    expect(rejected?.status === 'rejected' && rejected.reason).toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(repository.revokeRefreshFamily).not.toHaveBeenCalled();
+  });
+
+  it('does not revoke a family when an attacker supplies a mismatching token hash', async () => {
+    const { service, repository, tokens } = createService();
+    tokens.verifyRefresh.mockResolvedValue({
+      sid: 'session-id',
+      fid: 'family-id',
+      sub: activeUser.id,
+    });
+    repository.findRefreshSession.mockResolvedValue({
+      id: 'session-id',
+      familyId: 'family-id',
+      userId: activeUser.id,
+      tokenHash: await argon2.hash('real-refresh-token'),
+      revokedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(
+      service.refresh('different-refresh-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(repository.revokeRefreshFamily).not.toHaveBeenCalled();
+  });
+
+  it('rejects access and refresh for a user blocked after login', async () => {
+    const { service, users, repository, tokens } = createService();
+    users.findById.mockResolvedValue({ ...activeUser, isBlocked: true });
+    await expect(
+      service.me({
+        sub: activeUser.id,
+        telegramId: '123',
+        role: UserRole.CUSTOMER,
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    tokens.verifyRefresh.mockResolvedValue({
+      sid: 'session-id',
+      fid: 'family-id',
+      sub: activeUser.id,
+    });
+    repository.findRefreshSession.mockResolvedValue({
+      id: 'session-id',
+      familyId: 'family-id',
+      userId: activeUser.id,
+      tokenHash: await argon2.hash('refresh-token'),
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(repository.revokeRefreshFamily).toHaveBeenCalledWith(
+      'family-id',
+      activeUser.id,
+    );
+    expect(repository.rotateRefreshSession).not.toHaveBeenCalled();
   });
 
   it('returns the current safe user and rejects a missing user', async () => {

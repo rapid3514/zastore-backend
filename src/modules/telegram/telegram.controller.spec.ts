@@ -22,7 +22,8 @@ describe('Telegram webhook registration', () => {
       TELEGRAM_WEBHOOK_SECRET: 'test-webhook-secret',
       TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: '300',
       MINI_APP_URL: 'https://mini-app.example/app',
-      CORS_ORIGINS: 'https://mini-app.example',
+      APP_PUBLIC_URL: 'https://backend.example',
+      REDIS_URL: '',
     });
 
     const [{ AppModule }, { PrismaService }, { TelegramService }] =

@@ -1,4 +1,4 @@
-import { ConfigService } from '@nestjs/config';
+import { createConfigService } from '../../../test/helpers/config.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ImageKitService } from './imagekit.service.js';
 
@@ -10,7 +10,7 @@ describe('ImageKitService upload authentication', () => {
     vi.setSystemTime(new Date('2026-10-04T12:00:00.000Z'));
     const before = Math.floor(Date.now() / 1000);
     const service = new ImageKitService(
-      new ConfigService({ IMAGEKIT_PRIVATE_KEY: 'private_test_key' }),
+      createConfigService({ IMAGEKIT_PRIVATE_KEY: 'private_test_key' }),
     );
     const authentication = service.getUploadAuthentication();
 

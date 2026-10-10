@@ -1,12 +1,14 @@
+import { ProductAvailabilityStatus } from '../../generated/prisma/client.js';
+
 const TELEGRAM_CAPTION_LIMIT = 1024;
 
 export interface TelegramCaptionProduct {
   name: string;
   description: string | null;
   price: { toString(): string } | string | number;
+  cargoPrice?: { toString(): string } | string | number | null;
   category: { name: string };
-  isAvailable: boolean;
-  isActive: boolean;
+  availabilityStatus: ProductAvailabilityStatus;
 }
 
 export function buildProductTelegramCaption(
@@ -18,15 +20,23 @@ export function buildProductTelegramCaption(
     `💰 ${formatPrice(product.price)} so‘m`,
     `🗂 ${escapeTelegramHtml(product.category.name)}`,
   ];
-  const availability =
-    product.isActive && product.isAvailable
-      ? '✅ Mavjud'
-      : '❌ Hozir mavjud emas';
+  if (
+    product.availabilityStatus ===
+      ProductAvailabilityStatus.ARRIVING_IN_14_DAYS &&
+    product.cargoPrice != null
+  ) {
+    header.push(`🚚 Kargo: ${formatPrice(product.cargoPrice)} so‘m`);
+  }
+  const availability = {
+    [ProductAvailabilityStatus.IN_STOCK]: '✅ Sotuvda bor',
+    [ProductAvailabilityStatus.ARRIVING_IN_14_DAYS]: '🚚 14 kunda keladi',
+    [ProductAvailabilityStatus.OUT_OF_STOCK]: '❌ Sotuvda yo‘q',
+  }[product.availabilityStatus];
   const withoutDescription = [...header, '', availability].join('\n');
   const description = product.description?.trim();
   if (!description) return withoutDescription;
 
-  const fixedLength = [...header, '', '', availability].join('\n').length;
+  const fixedLength = [...header, '', '', '', availability].join('\n').length;
   const available = TELEGRAM_CAPTION_LIMIT - fixedLength;
   const safeDescription = truncateAndEscape(description, available);
   return [...header, '', safeDescription, '', availability].join('\n');

@@ -15,6 +15,12 @@ enum UserRole {
   SUPER_ADMIN
 }
 
+enum ProductAvailabilityStatus {
+  IN_STOCK
+  ARRIVING_IN_14_DAYS
+  OUT_OF_STOCK
+}
+
 model User {
   id              String           @id @default(uuid()) @db.Uuid
   telegramId      BigInt           @unique
@@ -56,12 +62,13 @@ model Product {
   name                     String
   description              String?
   price                    Decimal                   @db.Decimal(10, 2)
+  cargoPrice               Decimal?                  @db.Decimal(10, 2)
   imageUrl                 String?
   imageFileId              String?
   categoryId               String                    @db.Uuid
   category                 Category                  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  isAvailable              Boolean                   @default(true)
-  isActive                 Boolean                   @default(true)
+  availabilityStatus       ProductAvailabilityStatus @default(IN_STOCK)
+  version                  Int                       @default(0)
   telegramChannelMessageId Int?
   telegramButtonMessageId  Int?
   telegramPublishedAt      DateTime?
@@ -73,8 +80,9 @@ model Product {
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
 
-  @@index([categoryId, isActive])
-  @@index([isActive, createdAt])
+  @@index([categoryId])
+  @@index([createdAt])
+  @@index([availabilityStatus])
   @@index([imageFileId])
   @@index([telegramSyncStatus])
 }
@@ -82,6 +90,27 @@ model Product {
 enum ProductMediaType {
   IMAGE
   VIDEO
+}
+
+// Tracks provider-side media lifecycle independently from Product rows.  A file
+// marked DELETE_PENDING can never be attached by the application, preventing a
+// concurrent cleanup from deleting an asset a product is about to reference.
+enum MediaAssetStatus {
+  ACTIVE
+  DELETE_PENDING
+  DELETED
+}
+
+model MediaAsset {
+  fileId               String           @id
+  status               MediaAssetStatus @default(ACTIVE)
+  deleteRequestedAt    DateTime?
+  deleteLeaseExpiresAt DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([status, deleteRequestedAt])
 }
 
 model ProductMedia {
@@ -180,6 +209,8 @@ enum WeekDay {
 model Order {
   id                   String      @id @default(uuid()) @db.Uuid
   userId               String      @db.Uuid
+  idempotencyKey       String?     @db.Uuid
+  requestHash          String?     @db.Char(64)
   user                 User        @relation("UserOrders", fields: [userId], references: [id], onDelete: Restrict)
   status               OrderStatus @default(PENDING_CONFIRMATION)
   phone                String?
@@ -198,6 +229,7 @@ model Order {
   cancelReason         String?
   items                OrderItem[]
   payment              Payment?
+  notifications        NotificationOutbox[]
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
@@ -205,6 +237,46 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([confirmationDeadline])
+  @@unique([userId, idempotencyKey])
+  @@index([status, confirmationDeadline])
+}
+
+enum NotificationKind {
+  NEW_ORDER
+  ORDER_STATUS
+  ORDER_REJECTED
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  UNCERTAIN
+}
+
+model NotificationOutbox {
+  id            String                     @id @default(uuid()) @db.Uuid
+  sequence      BigInt                     @unique @default(autoincrement())
+  eventKey      String                     @unique
+  orderId       String                     @db.Uuid
+  order         Order                      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  recipient     BigInt
+  kind          NotificationKind
+  orderStatus   OrderStatus
+  status        NotificationDeliveryStatus @default(PENDING)
+  attempts      Int                        @default(0)
+  availableAt   DateTime                   @default(now())
+  claimedAt     DateTime?
+  claimToken    String?                    @db.Uuid
+  deliveredAt   DateTime?
+  lastErrorCode String?
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  @@index([status, availableAt])
+  @@index([status, claimedAt])
+  @@index([orderId])
 }
 
 model Payment {
@@ -269,6 +341,10 @@ model WorkHour {
 
 model RefreshSession {
   id        String    @id @default(uuid()) @db.Uuid
+  familyId  String    @default(uuid()) @db.Uuid
+  parentId  String?   @unique @db.Uuid
+  parent    RefreshSession? @relation("RefreshRotation", fields: [parentId], references: [id], onDelete: SetNull)
+  replacement RefreshSession? @relation("RefreshRotation")
   tokenHash String
   userId    String    @db.Uuid
   user      User      @relation("UserRefreshSessions", fields: [userId], references: [id], onDelete: Cascade)
@@ -278,5 +354,6 @@ model RefreshSession {
   updatedAt DateTime  @updatedAt
 
   @@index([userId])
+  @@index([familyId, revokedAt])
   @@index([expiresAt])
 }

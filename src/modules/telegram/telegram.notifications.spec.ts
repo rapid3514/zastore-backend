@@ -1,8 +1,8 @@
 import {
-  BadGatewayException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { createConfigService } from '../../../test/helpers/config.js';
+import { TelegramDeliveryError } from '../notifications/telegram-delivery.error.js';
 import { OrderStatus } from '../../generated/prisma/client.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { postTelegram } from './telegram-api.js';
@@ -22,7 +22,7 @@ describe('TelegramService notifications', () => {
     });
     service = new TelegramService(
       {} as never,
-      new ConfigService({ TELEGRAM_BOT_TOKEN: 'token-from-env' }),
+      createConfigService({ TELEGRAM_BOT_TOKEN: 'token-from-env' }),
     );
   });
 
@@ -154,7 +154,7 @@ describe('TelegramService notifications', () => {
   });
 
   it('fails clearly when the bot token is missing', async () => {
-    service = new TelegramService({} as never, new ConfigService({}));
+    service = new TelegramService({} as never, createConfigService({ TELEGRAM_BOT_TOKEN: undefined }));
 
     await expect(service.sendMessage('123', 'Hello')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
@@ -168,12 +168,12 @@ describe('TelegramService notifications', () => {
       payload: { ok: false, description: 'Unauthorized' },
     });
     await expect(service.sendMessage('123', 'Hello')).rejects.toBeInstanceOf(
-      BadGatewayException,
+      TelegramDeliveryError,
     );
 
     postTelegramMock.mockRejectedValueOnce(new Error('transport failed'));
     await expect(service.sendMessage('123', 'Hello')).rejects.toBeInstanceOf(
-      BadGatewayException,
+      TelegramDeliveryError,
     );
   });
 });

@@ -17,6 +17,7 @@ import { postTelegram } from '../src/modules/telegram/telegram-api.js';
 import { TelegramService } from '../src/modules/telegram/telegram.service.js';
 import { UsersRepository } from '../src/modules/users/users.repository.js';
 import { UsersService } from '../src/modules/users/users.service.js';
+import { createConfigService } from './helpers/config.js';
 
 vi.mock('../src/modules/telegram/telegram-api.js', () => ({
   postTelegram: vi.fn(),
@@ -47,7 +48,7 @@ describe('Telegram registration webhook (e2e)', () => {
         { provide: UsersRepository, useValue: usersRepository },
         {
           provide: ConfigService,
-          useValue: { get: (key: string) => config[key] },
+          useValue: createConfigService(config),
         },
       ],
     }).compile();

@@ -9,6 +9,7 @@ import { NotificationsModule } from '../notifications/notifications.module.js';
 import { OrdersController } from './orders.controller.js';
 import { OrdersRepository } from './orders.repository.js';
 import { OrdersService } from './orders.service.js';
+import { OrdersExpirationWorker } from './orders-expiration.worker.js';
 
 @Module({
   imports: [
@@ -19,6 +20,12 @@ import { OrdersService } from './orders.service.js';
     PassportModule.register({ defaultStrategy: 'jwt' }),
   ],
   controllers: [OrdersController],
-  providers: [OrdersRepository, OrdersService, JwtAuthGuard, RolesGuard],
+  providers: [
+    OrdersRepository,
+    OrdersService,
+    OrdersExpirationWorker,
+    JwtAuthGuard,
+    RolesGuard,
+  ],
 })
 export class OrdersModule {}

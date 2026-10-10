@@ -12,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { TelegramService } from './telegram.service.js';
 import type { TelegramUpdate } from './telegram.types.js';
+import { getConfiguration } from '../../config/configuration.js';
 
 @Controller('telegram')
 export class TelegramController {
@@ -29,9 +30,7 @@ export class TelegramController {
     suppliedSecret: string | undefined,
     @Body() update: TelegramUpdate,
   ): Promise<{ ok: true }> {
-    const expectedSecret = this.configService.get<string>(
-      'TELEGRAM_WEBHOOK_SECRET',
-    );
+    const expectedSecret = getConfiguration(this.configService).telegram.webhookSecret;
     if (!this.secretMatches(suppliedSecret, expectedSecret)) {
       this.logger.warn('Rejected Telegram webhook with invalid secret');
       throw new UnauthorizedException('Invalid Telegram webhook secret');

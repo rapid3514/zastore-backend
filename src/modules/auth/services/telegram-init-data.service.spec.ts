@@ -5,6 +5,7 @@ import {
 import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TelegramInitDataService } from './telegram-init-data.service.js';
+import { createConfigService } from '../../../../test/helpers/config.js';
 
 const botToken = 'test-bot-token';
 const now = 1_800_000_000_000;
@@ -33,11 +34,7 @@ function signedInitData(overrides: Record<string, string> = {}): string {
 
 function service(token = botToken) {
   return new TelegramInitDataService(
-    {
-      get: (key: string) => (key === 'TELEGRAM_BOT_TOKEN' ? token : undefined),
-      getOrThrow: (key: string) =>
-        key === 'TELEGRAM_INIT_DATA_MAX_AGE_SECONDS' ? 300 : undefined,
-    } as never,
+    createConfigService({ TELEGRAM_BOT_TOKEN: token || undefined }),
   );
 }
 

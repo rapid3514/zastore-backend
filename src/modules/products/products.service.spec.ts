@@ -2,7 +2,9 @@ import {
   AuditAction,
   AuditEntityType,
   Prisma,
+  ProductAvailabilityStatus,
 } from '../../generated/prisma/client.js';
+import { ConflictException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { ProductsService } from './products.service.js';
 
@@ -16,13 +18,23 @@ const product = {
   imageUrl: null,
   categoryId,
   category: { id: categoryId, name: 'Food', slug: 'food' },
-  isAvailable: true,
+  availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
   isActive: true,
+  version: 0,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
 
 describe('ProductsService audit integration', () => {
+  it('rejects a stale concurrent product update with a controlled conflict', async () => {
+    const repository = {
+      findById: vi.fn().mockResolvedValue(product),
+      update: vi.fn().mockRejectedValue({ code: 'P2025' }),
+    };
+    const service = new ProductsService(repository as never);
+    await expect(service.update(productId, { price: 15000 })).rejects.toBeInstanceOf(ConflictException);
+    expect(repository.update).toHaveBeenCalledWith(productId, { price: 15000 }, 0);
+  });
   it('writes a product update audit event', async () => {
     const repository = {
       findById: vi.fn().mockResolvedValue(product),

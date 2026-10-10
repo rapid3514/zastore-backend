@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import type {
   Prisma,
+  ProductAvailabilityStatus,
   ProductMediaType,
   TelegramProductSyncStatus,
 } from '../../generated/prisma/client.js';
@@ -18,6 +19,7 @@ const publicProductSelect = {
   name: true,
   description: true,
   price: true,
+  cargoPrice: true,
   imageUrl: true,
   media: {
     orderBy: [{ type: 'asc' }, { position: 'asc' }],
@@ -26,32 +28,48 @@ const publicProductSelect = {
       type: true,
       url: true,
       position: true,
+      width: true,
+      height: true,
     },
   },
   categoryId: true,
   category: { select: { id: true, name: true, slug: true } },
-  isAvailable: true,
-  isActive: true,
+  availabilityStatus: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ProductSelect;
 
+const publicCardSelect = {
+  id: true,
+  name: true,
+  price: true,
+  cargoPrice: true,
+  imageUrl: true,
+  media: {
+    where: { type: 'IMAGE' },
+    orderBy: { position: 'asc' },
+    take: 1,
+    select: { url: true },
+  },
+  categoryId: true,
+  category: { select: { id: true, name: true, slug: true } },
+  availabilityStatus: true,
+} satisfies Prisma.ProductSelect;
+
+export type PublicProductCard = Prisma.ProductGetPayload<{ select: typeof publicCardSelect }>;
+
 type AdminProduct = Prisma.ProductGetPayload<{
   include: typeof categoryInclude;
 }>;
-type PublicProduct = Prisma.ProductGetPayload<{
-  select: typeof publicProductSelect;
-}>;
-
 export interface ProductData {
   name: string;
   description?: string | null;
   price: number;
+  cargoPrice?: number | null;
   imageUrl?: string | null;
   imageFileId?: string | null;
   categoryId: string;
-  isAvailable?: boolean;
-  isActive?: boolean;
+  availabilityStatus?: ProductAvailabilityStatus;
   telegramSyncStatus?: TelegramProductSyncStatus;
 }
 
@@ -95,21 +113,17 @@ export class ProductsRepository {
   list(
     query: QueryProductsDto,
     includeInactive: false,
-  ): Promise<{ data: PublicProduct[]; total: number }>;
+  ): Promise<{ data: PublicProductCard[]; total: number }>;
   async list(query: QueryProductsDto, includeInactive: boolean) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const search = query.search?.trim();
     const where: Prisma.ProductWhereInput = {
-      ...(includeInactive
-        ? query.isActive === undefined
-          ? {}
-          : { isActive: query.isActive }
-        : { isActive: true, category: { isActive: true } }),
+      ...(includeInactive ? {} : { category: { isActive: true } }),
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
-      ...(query.isAvailable === undefined
+      ...(query.availabilityStatus === undefined
         ? {}
-        : { isAvailable: query.isAvailable }),
+        : { availabilityStatus: query.availabilityStatus }),
       ...(search
         ? {
             OR: [
@@ -130,7 +144,7 @@ export class ProductsRepository {
           })
         : this.prisma.product.findMany({
             where,
-            select: publicProductSelect,
+            select: publicCardSelect,
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             skip: (page - 1) * limit,
             take: limit,
@@ -142,7 +156,7 @@ export class ProductsRepository {
 
   findPublicById(id: string) {
     return this.prisma.product.findFirst({
-      where: { id, isActive: true, category: { isActive: true } },
+      where: { id, category: { isActive: true } },
       select: publicProductSelect,
     });
   }
@@ -158,6 +172,13 @@ export class ProductsRepository {
     return this.prisma.product.create({ data, include: categoryInclude });
   }
 
+  createInTransaction(
+    transaction: Prisma.TransactionClient,
+    data: ProductData,
+  ) {
+    return transaction.product.create({ data, include: categoryInclude });
+  }
+
   createWithMedia(data: ProductData, media: ProductMediaData[]) {
     return this.prisma.product.create({
       data: { ...data, media: { create: media } },
@@ -165,10 +186,34 @@ export class ProductsRepository {
     });
   }
 
-  update(id: string, data: Partial<ProductData>) {
+  createWithMediaInTransaction(
+    transaction: Prisma.TransactionClient,
+    data: ProductData,
+    media: ProductMediaData[],
+  ) {
+    return transaction.product.create({
+      data: { ...data, media: { create: media } },
+      include: categoryInclude,
+    });
+  }
+
+  update(id: string, data: Partial<ProductData>, expectedVersion: number) {
     return this.prisma.product.update({
-      where: { id },
-      data,
+      where: { id, version: expectedVersion },
+      data: { ...data, version: { increment: 1 } },
+      include: categoryInclude,
+    });
+  }
+
+  updateInTransaction(
+    transaction: Prisma.TransactionClient,
+    id: string,
+    data: Partial<ProductData>,
+    expectedVersion: number,
+  ) {
+    return transaction.product.update({
+      where: { id, version: expectedVersion },
+      data: { ...data, version: { increment: 1 } },
       include: categoryInclude,
     });
   }
@@ -177,11 +222,31 @@ export class ProductsRepository {
     id: string,
     data: Partial<ProductData>,
     media: ProductMediaData[],
+    expectedVersion: number,
   ) {
     return this.prisma.product.update({
-      where: { id },
+      where: { id, version: expectedVersion },
       data: {
         ...data,
+        version: { increment: 1 },
+        media: { deleteMany: {}, create: media },
+      },
+      include: categoryInclude,
+    });
+  }
+
+  replaceMediaInTransaction(
+    transaction: Prisma.TransactionClient,
+    id: string,
+    data: Partial<ProductData>,
+    media: ProductMediaData[],
+    expectedVersion: number,
+  ) {
+    return transaction.product.update({
+      where: { id, version: expectedVersion },
+      data: {
+        ...data,
+        version: { increment: 1 },
         media: { deleteMany: {}, create: media },
       },
       include: categoryInclude,
@@ -219,5 +284,34 @@ export class ProductsRepository {
 
   delete(id: string) {
     return this.prisma.product.delete({ where: { id } });
+  }
+
+  removeOrDeactivate(id: string, expectedVersion: number) {
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`SELECT "id" FROM "Product" WHERE "id" = ${id}::uuid FOR UPDATE`;
+      const product = await transaction.product.findUnique({ where: { id }, include: categoryInclude });
+      if (!product) return null;
+      if (product.version !== expectedVersion) {
+        throw new ConflictException('Mahsulot boshqa so‘rov tomonidan o‘zgartirilgan; qayta yuklab ko‘ring');
+      }
+      const references = await transaction.orderItem.count({ where: { productId: id } });
+      if (references > 0) {
+        if (product.availabilityStatus === 'OUT_OF_STOCK') {
+          return { product, softDeleted: true };
+        }
+        const unavailable = await transaction.product.update({
+          where: { id, version: expectedVersion },
+          data: {
+            availabilityStatus: 'OUT_OF_STOCK',
+            cargoPrice: null,
+            version: { increment: 1 },
+          },
+          include: categoryInclude,
+        });
+        return { product: unavailable, softDeleted: true };
+      }
+      await transaction.product.delete({ where: { id, version: expectedVersion } });
+      return { product, softDeleted: false };
+    });
   }
 }

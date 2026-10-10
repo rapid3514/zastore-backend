@@ -54,9 +54,11 @@ export const ModelName = {
   User: 'User',
   Category: 'Category',
   Product: 'Product',
+  MediaAsset: 'MediaAsset',
   ProductMedia: 'ProductMedia',
   ProductTelegramMessage: 'ProductTelegramMessage',
   Order: 'Order',
+  NotificationOutbox: 'NotificationOutbox',
   Payment: 'Payment',
   AuditLog: 'AuditLog',
   OrderItem: 'OrderItem',
@@ -119,11 +121,12 @@ export const ProductScalarFieldEnum = {
   name: 'name',
   description: 'description',
   price: 'price',
+  cargoPrice: 'cargoPrice',
   imageUrl: 'imageUrl',
   imageFileId: 'imageFileId',
   categoryId: 'categoryId',
-  isAvailable: 'isAvailable',
-  isActive: 'isActive',
+  availabilityStatus: 'availabilityStatus',
+  version: 'version',
   telegramChannelMessageId: 'telegramChannelMessageId',
   telegramButtonMessageId: 'telegramButtonMessageId',
   telegramPublishedAt: 'telegramPublishedAt',
@@ -134,6 +137,19 @@ export const ProductScalarFieldEnum = {
 } as const
 
 export type ProductScalarFieldEnum = (typeof ProductScalarFieldEnum)[keyof typeof ProductScalarFieldEnum]
+
+
+export const MediaAssetScalarFieldEnum = {
+  fileId: 'fileId',
+  status: 'status',
+  deleteRequestedAt: 'deleteRequestedAt',
+  deleteLeaseExpiresAt: 'deleteLeaseExpiresAt',
+  deletedAt: 'deletedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type MediaAssetScalarFieldEnum = (typeof MediaAssetScalarFieldEnum)[keyof typeof MediaAssetScalarFieldEnum]
 
 
 export const ProductMediaScalarFieldEnum = {
@@ -167,6 +183,8 @@ export type ProductTelegramMessageScalarFieldEnum = (typeof ProductTelegramMessa
 export const OrderScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
+  idempotencyKey: 'idempotencyKey',
+  requestHash: 'requestHash',
   status: 'status',
   phone: 'phone',
   deliveryAddress: 'deliveryAddress',
@@ -187,6 +205,28 @@ export const OrderScalarFieldEnum = {
 } as const
 
 export type OrderScalarFieldEnum = (typeof OrderScalarFieldEnum)[keyof typeof OrderScalarFieldEnum]
+
+
+export const NotificationOutboxScalarFieldEnum = {
+  id: 'id',
+  sequence: 'sequence',
+  eventKey: 'eventKey',
+  orderId: 'orderId',
+  recipient: 'recipient',
+  kind: 'kind',
+  orderStatus: 'orderStatus',
+  status: 'status',
+  attempts: 'attempts',
+  availableAt: 'availableAt',
+  claimedAt: 'claimedAt',
+  claimToken: 'claimToken',
+  deliveredAt: 'deliveredAt',
+  lastErrorCode: 'lastErrorCode',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type NotificationOutboxScalarFieldEnum = (typeof NotificationOutboxScalarFieldEnum)[keyof typeof NotificationOutboxScalarFieldEnum]
 
 
 export const PaymentScalarFieldEnum = {
@@ -246,6 +286,8 @@ export type WorkHourScalarFieldEnum = (typeof WorkHourScalarFieldEnum)[keyof typ
 
 export const RefreshSessionScalarFieldEnum = {
   id: 'id',
+  familyId: 'familyId',
+  parentId: 'parentId',
   tokenHash: 'tokenHash',
   userId: 'userId',
   expiresAt: 'expiresAt',

@@ -1,5 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import type { Prisma } from '../../generated/prisma/client.js';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  OrderStatus,
+  PaymentStatus,
+  type Prisma,
+} from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { QueryPaymentsDto } from './dto/query-payments.dto.js';
 
@@ -30,7 +34,7 @@ export class PaymentsRepository {
   findOwnedOrder(orderId: string, userId: string) {
     return this.prisma.order.findFirst({
       where: { id: orderId, userId },
-      select: { id: true, total: true },
+      select: { id: true, total: true, status: true },
     });
   }
 
@@ -52,6 +56,44 @@ export class PaymentsRepository {
     return this.prisma.payment.create({
       data: { orderId, amount },
       include: paymentInclude,
+    });
+  }
+
+  createForOwnedOrder(orderId: string, userId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // All payment creation and order transitions serialize on this order row.
+      await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${orderId}::uuid AND "userId" = ${userId}::uuid FOR UPDATE`;
+      const order = await tx.order.findFirst({
+        where: { id: orderId, userId },
+        select: { id: true, status: true, total: true },
+      });
+      if (!order) return null;
+      const allowed: readonly OrderStatus[] = [
+        OrderStatus.PENDING_CONFIRMATION,
+        OrderStatus.CONFIRMED,
+        OrderStatus.PROCESSING,
+      ];
+      if (!allowed.includes(order.status))
+        throw new BadRequestException({
+          error: 'ORDER_NOT_PAYABLE',
+          message: 'Bu holatdagi buyurtma uchun to‘lov yaratib bo‘lmaydi',
+        });
+      const existing = await tx.payment.findUnique({
+        where: { orderId },
+        include: paymentInclude,
+      });
+      if (existing) {
+        if (existing.status !== PaymentStatus.PENDING)
+          throw new BadRequestException({
+            error: 'PAYMENT_NOT_PENDING',
+            message: 'Bu buyurtma uchun yangi to‘lovga ruxsat yo‘q',
+          });
+        return existing;
+      }
+      return tx.payment.create({
+        data: { orderId, amount: order.total },
+        include: paymentInclude,
+      });
     });
   }
 

@@ -1,5 +1,6 @@
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createConfigService } from './helpers/config.js';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
@@ -44,7 +45,7 @@ describe('Product Telegram sync endpoint (e2e)', () => {
         RolesGuard,
         { provide: ProductsService, useValue: productsService },
         { provide: UsersService, useValue: usersService },
-        { provide: ConfigService, useValue: { getOrThrow: () => secret } },
+        { provide: ConfigService, useValue: createConfigService() },
       ],
     }).compile();
     jwtService = moduleRef.get(JwtService);
@@ -74,8 +75,8 @@ describe('Product Telegram sync endpoint (e2e)', () => {
 
   function token(role: UserRole) {
     return jwtService.sign(
-      { sub: userId, telegramId: '123', role },
-      { secret, expiresIn: '5m' },
+      { sub: userId, telegramId: '123', role, type: 'access' },
+      { secret, expiresIn: '5m', issuer: 'zastore-shop', audience: 'zastore-mini-app', algorithm: 'HS256' },
     );
   }
 

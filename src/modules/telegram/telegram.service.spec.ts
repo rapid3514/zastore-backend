@@ -1,4 +1,4 @@
-import { ConfigService } from '@nestjs/config';
+import { createConfigService } from '../../../test/helpers/config.js';
 import { UserRole } from '../../generated/prisma/client.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { postTelegram } from './telegram-api.js';
@@ -46,15 +46,15 @@ describe('TelegramService', () => {
     });
     service = new TelegramService(
       users as never,
-      new ConfigService({
+      createConfigService({
         TELEGRAM_BOT_TOKEN: 'test-token',
         MINI_APP_URL: 'https://mini-app.example/app',
       }),
     );
   });
 
-  function sentBody(call = 0): Record<string, any> {
-    return postTelegramMock.mock.calls[call][2];
+  function sentBody(call = 0) {
+    return postTelegramMock.mock.calls[call][2] as { text?: string; reply_markup: { inline_keyboard: Array<Array<Record<string, unknown>>> } };
   }
 
   function expectRegistrationKeyboard(): void {

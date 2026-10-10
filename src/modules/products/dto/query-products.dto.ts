@@ -1,6 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -9,15 +9,14 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-
-const queryBoolean = ({ value }: { value: unknown }) =>
-  value === 'true' ? true : value === 'false' ? false : value;
+import { ProductAvailabilityStatus } from '../../../generated/prisma/client.js';
 
 export class QueryProductsDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(10000)
   page?: number;
 
   @IsOptional()
@@ -40,12 +39,7 @@ export class QueryProductsDto {
   search?: string;
 
   @IsOptional()
-  @Transform(queryBoolean)
-  @IsBoolean()
-  isAvailable?: boolean;
+  @IsEnum(ProductAvailabilityStatus)
+  availabilityStatus?: ProductAvailabilityStatus;
 
-  @IsOptional()
-  @Transform(queryBoolean)
-  @IsBoolean()
-  isActive?: boolean;
 }

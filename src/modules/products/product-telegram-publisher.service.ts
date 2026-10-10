@@ -5,8 +5,10 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { getConfiguration } from '../../config/configuration.js';
 import {
   ProductMediaType,
+  ProductAvailabilityStatus,
   TelegramProductSyncStatus,
 } from '../../generated/prisma/client.js';
 import {
@@ -32,13 +34,13 @@ export interface TelegramProductRecord {
   name: string;
   description: string | null;
   price: { toString(): string };
+  cargoPrice?: { toString(): string } | null;
   imageUrl: string | null;
   imageFileId: string | null;
   media?: TelegramProductMedia[];
   telegramMessages?: { messageId: number; position: number }[];
   category: { name: string };
-  isAvailable: boolean;
-  isActive: boolean;
+  availabilityStatus: ProductAvailabilityStatus;
   telegramChannelMessageId: number | null;
   telegramButtonMessageId: number | null;
   telegramPublishedAt: Date | null;
@@ -390,7 +392,7 @@ export class ProductTelegramPublisherService {
   }
 
   private get channelId(): string {
-    const channelId = this.configService.get<string>('TELEGRAM_CHANNEL_ID');
+    const channelId = getConfiguration(this.configService).telegram.channelId;
     if (!channelId) {
       throw new ServiceUnavailableException({
         error: 'TELEGRAM_CHANNEL_NOT_CONFIGURED',
@@ -401,13 +403,8 @@ export class ProductTelegramPublisherService {
   }
 
   private productReplyMarkup(productId: string): Record<string, unknown> {
-    const botUsername = this.configService.get<string>('TELEGRAM_BOT_USERNAME');
-    const miniAppShortName = this.configService.get<string>(
-      'TELEGRAM_MINI_APP_SHORT_NAME',
-    );
-    const useMainApp = this.configService.get<boolean>(
-      'TELEGRAM_MINI_APP_USE_MAIN',
-    );
+    const { botUsername, miniAppShortName, miniAppUseMain: useMainApp } =
+      getConfiguration(this.configService).telegram;
     if (!botUsername || (!miniAppShortName && !useMainApp)) {
       throw new ServiceUnavailableException({
         error: 'TELEGRAM_MINI_APP_NOT_CONFIGURED',

@@ -1,8 +1,10 @@
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, UserRole } from '../src/generated/prisma/client.js';
+import configuration from '../src/config/configuration.js';
 
-const telegramId = process.env.SUPER_ADMIN_TELEGRAM_ID;
+const { runtime } = configuration();
+const telegramId = runtime.telegram.superAdminTelegramId;
 
 if (!telegramId?.trim()) {
   console.warn(
@@ -13,7 +15,7 @@ if (!telegramId?.trim()) {
     'SUPER_ADMIN_TELEGRAM_ID must be a numeric Telegram user ID; skipping super admin seed.',
   );
 } else {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+  const adapter = new PrismaPg({ connectionString: runtime.database.url });
   const prisma = new PrismaClient({ adapter });
 
   try {

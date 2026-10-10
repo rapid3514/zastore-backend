@@ -1,5 +1,6 @@
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createConfigService } from './helpers/config.js';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
@@ -27,7 +28,7 @@ const userId = '11111111-1111-4111-8111-111111111111';
 describe('WorkHoursController (e2e)', () => {
   let app: INestApplication;
   let jwt: JwtService;
-  let databaseRole = UserRole.ADMIN;
+  let databaseRole: UserRole = UserRole.ADMIN;
   const users = {
     findById: vi.fn(() =>
       Promise.resolve({ id: userId, role: databaseRole, isBlocked: false }),
@@ -52,7 +53,7 @@ describe('WorkHoursController (e2e)', () => {
         RolesGuard,
         { provide: UsersService, useValue: users },
         { provide: WorkHoursService, useValue: service },
-        { provide: ConfigService, useValue: { getOrThrow: () => secret } },
+        { provide: ConfigService, useValue: createConfigService() },
       ],
     }).compile();
     jwt = moduleRef.get(JwtService);
@@ -78,8 +79,8 @@ describe('WorkHoursController (e2e)', () => {
 
   function authorization(role: UserRole) {
     return `Bearer ${jwt.sign(
-      { sub: userId, telegramId: '123', role },
-      { secret, expiresIn: '5m' },
+      { sub: userId, telegramId: '123', role, type: 'access' },
+      { secret, expiresIn: '5m', issuer: 'zastore-shop', audience: 'zastore-mini-app', algorithm: 'HS256' },
     )}`;
   }
 

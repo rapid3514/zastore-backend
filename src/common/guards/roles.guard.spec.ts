@@ -54,4 +54,40 @@ describe('RolesGuard exact role matching', () => {
       ).canActivate(context(UserRole.SUPER_ADMIN)),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('rejects an old ADMIN token after the database role was demoted', async () => {
+    await expect(
+      guard([UserRole.ADMIN], UserRole.CUSTOMER).canActivate(
+        context(UserRole.ADMIN),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects a blocked database user despite a signed privileged role', async () => {
+    const blocked = new RolesGuard(
+      { getAllAndOverride: () => [UserRole.ADMIN] } as never,
+      {
+        findById: vi
+          .fn()
+          .mockResolvedValue({
+            id: 'user-id',
+            role: UserRole.ADMIN,
+            isBlocked: true,
+          }),
+      } as never,
+    );
+    await expect(
+      blocked.canActivate(context(UserRole.ADMIN)),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects a signed token whose user no longer exists', async () => {
+    const removed = new RolesGuard(
+      { getAllAndOverride: () => [UserRole.CUSTOMER] } as never,
+      { findById: vi.fn().mockResolvedValue(null) } as never,
+    );
+    await expect(
+      removed.canActivate(context(UserRole.CUSTOMER)),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
 });

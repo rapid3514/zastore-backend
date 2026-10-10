@@ -37,6 +37,7 @@ const paymentRecord = {
 describe('PaymentsService', () => {
   const repository = {
     findOwnedOrder: vi.fn(),
+    createForOwnedOrder: vi.fn(),
     findByOrderId: vi.fn(),
     findOwnedByOrderId: vi.fn(),
     create: vi.fn(),
@@ -51,18 +52,13 @@ describe('PaymentsService', () => {
   });
 
   it('creates a payment using the trusted order total', async () => {
-    repository.findOwnedOrder.mockResolvedValue({
-      id: orderId,
-      total: new Prisma.Decimal('75.50'),
-    });
-    repository.findByOrderId.mockResolvedValue(null);
-    repository.create.mockResolvedValue(paymentRecord);
+    repository.createForOwnedOrder.mockResolvedValue(paymentRecord);
 
     const result = await service.createForOrder(userId, orderId);
 
-    expect(repository.create).toHaveBeenCalledWith(
+    expect(repository.createForOwnedOrder).toHaveBeenCalledWith(
       orderId,
-      new Prisma.Decimal('75.50'),
+      userId,
     );
     expect(result).toMatchObject({
       amount: '75.50',
@@ -73,7 +69,7 @@ describe('PaymentsService', () => {
   });
 
   it('does not expose another customer order as a valid payment target', async () => {
-    repository.findOwnedOrder.mockResolvedValue(null);
+    repository.createForOwnedOrder.mockResolvedValue(null);
 
     await expect(
       service.createForOrder(userId, orderId),
@@ -90,13 +86,11 @@ describe('PaymentsService', () => {
   });
 
   it('returns the existing payment instead of creating a duplicate', async () => {
-    repository.findOwnedOrder.mockResolvedValue({
-      id: orderId,
-      total: new Prisma.Decimal('75.50'),
-    });
-    repository.findByOrderId.mockResolvedValue(paymentRecord);
+    repository.createForOwnedOrder.mockResolvedValue(paymentRecord);
 
-    await expect(service.createForOrder(userId, orderId)).resolves.toMatchObject({
+    await expect(
+      service.createForOrder(userId, orderId),
+    ).resolves.toMatchObject({
       id: paymentRecord.id,
       status: PaymentStatus.PENDING,
     });

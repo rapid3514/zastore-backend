@@ -1,5 +1,6 @@
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createConfigService } from './helpers/config.js';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
@@ -55,7 +56,7 @@ describe('OrdersController (e2e)', () => {
         JwtStrategy,
         JwtAuthGuard,
         RolesGuard,
-        { provide: ConfigService, useValue: { getOrThrow: () => secret } },
+        { provide: ConfigService, useValue: createConfigService() },
         { provide: OrdersService, useValue: ordersService },
         { provide: UsersService, useValue: usersService },
       ],
@@ -94,8 +95,14 @@ describe('OrdersController (e2e)', () => {
 
   function token(role: UserRole) {
     return jwtService.sign(
-      { sub: customerId, telegramId: '123456789', role },
-      { secret, expiresIn: '5m' },
+      { sub: customerId, telegramId: '123456789', role, type: 'access' },
+      {
+        secret,
+        expiresIn: '5m',
+        issuer: 'zastore-shop',
+        audience: 'zastore-mini-app',
+        algorithm: 'HS256',
+      },
     );
   }
 
@@ -114,6 +121,7 @@ describe('OrdersController (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/v1/orders')
       .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
+      .set('Idempotency-Key', '66666666-6666-4666-8666-666666666666')
       .send({
         items: [{ productId, quantity: 2 }],
         phone: '+998901234567',
@@ -123,6 +131,39 @@ describe('OrdersController (e2e)', () => {
 
     expect(ordersService.createOrder).toHaveBeenCalled();
   });
+
+  it('requires a valid checkout Idempotency-Key UUID header', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
+      .send({ items: [{ productId, quantity: 1 }] })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
+      .set('Idempotency-Key', 'invalid')
+      .send({ items: [{ productId, quantity: 1 }] })
+      .expect(400);
+    expect(ordersService.createOrder).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { items: [{ productId, quantity: 2147483648 }] },
+    { items: [{ productId, quantity: 1001 }] },
+    { items: [{ productId, quantity: 1.5 }] },
+    { items: Array.from({ length: 101 }, () => ({ productId, quantity: 1 })) },
+  ])(
+    'rejects oversized checkout input before the service: %j',
+    async (payload) => {
+      await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
+        .set('Idempotency-Key', '66666666-6666-4666-8666-666666666666')
+        .send(payload)
+        .expect(400);
+      expect(ordersService.createOrder).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects invalid quantity with 400', async () => {
     await request(app.getHttpServer())

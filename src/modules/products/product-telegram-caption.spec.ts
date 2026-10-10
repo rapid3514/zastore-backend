@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ProductAvailabilityStatus } from '../../generated/prisma/client.js';
 import {
   buildProductTelegramCaption,
   formatPrice,
@@ -11,15 +12,14 @@ describe('product Telegram caption', () => {
       description: 'Yangi <model>',
       price: '180000.00',
       category: { name: 'Kiyim & aksessuar' },
-      isAvailable: true,
-      isActive: true,
+      availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
     });
 
     expect(caption).toContain('&lt;Qora &amp; ko‘ylak&gt;');
     expect(caption).toContain('180 000 so‘m');
     expect(caption).toContain('Kiyim &amp; aksessuar');
     expect(caption).toContain('Yangi &lt;model&gt;');
-    expect(caption).toContain('✅ Mavjud');
+    expect(caption).toContain('✅ Sotuvda bor');
   });
 
   it('marks unavailable products and stays inside Telegram caption limit', () => {
@@ -28,16 +28,29 @@ describe('product Telegram caption', () => {
       description: '<'.repeat(2_000),
       price: 12500.5,
       category: { name: 'Kategoriya' },
-      isAvailable: false,
-      isActive: true,
+      availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK,
     });
 
-    expect(caption).toContain('❌ Hozir mavjud emas');
+    expect(caption).toContain('❌ Sotuvda yo‘q');
     expect(caption).toContain('Mahsulot');
     expect(caption).toContain('12 500.5');
     expect(caption).toContain('Kategoriya');
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).not.toMatch(/&(?!lt;|gt;|amp;|quot;|#39;)/);
+  });
+
+  it('shows the 14-day arrival status', () => {
+    const caption = buildProductTelegramCaption({
+      name: 'Oldindan buyurtma mahsuloti',
+      description: null,
+      price: 50000,
+      cargoPrice: 5000.5,
+      category: { name: 'Kategoriya' },
+      availabilityStatus: ProductAvailabilityStatus.ARRIVING_IN_14_DAYS,
+    });
+
+    expect(caption).toContain('🚚 14 kunda keladi');
+    expect(caption).toContain('🚚 Kargo: 5 000.5 so‘m');
   });
 
   it('escapes script and Telegram HTML tags from user-controlled fields', () => {
@@ -46,8 +59,7 @@ describe('product Telegram caption', () => {
       description: '<b>test</b> & <i>x</i>',
       price: 1000,
       category: { name: '<u>category</u>' },
-      isAvailable: true,
-      isActive: true,
+      availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
     });
     expect(caption).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(caption).toContain(

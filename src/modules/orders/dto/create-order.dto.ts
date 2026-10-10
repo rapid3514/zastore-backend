@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  ArrayMaxSize,
   IsArray,
   IsNumber,
   IsOptional,
@@ -12,6 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { CreateOrderItemDto } from './create-order-item.dto.js';
+import { MAX_ORDER_ITEMS } from '../constants/order-limits.js';
 
 const normalizeText = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
@@ -19,6 +21,7 @@ const normalizeText = ({ value }: { value: unknown }) =>
 export class CreateOrderDto {
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_ORDER_ITEMS)
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
   items!: CreateOrderItemDto[];

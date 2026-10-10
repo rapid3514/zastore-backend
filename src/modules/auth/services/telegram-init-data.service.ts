@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { getConfiguration } from '../../../config/configuration.js';
 
 export interface TelegramInitDataUser {
   id: bigint;
@@ -16,12 +17,11 @@ export interface TelegramInitDataUser {
 
 @Injectable()
 export class TelegramInitDataService {
-  constructor(
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly configService: ConfigService) {}
 
   verify(initData: string): TelegramInitDataUser {
-    const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+    const config = getConfiguration(this.configService).telegram;
+    const botToken = config.botToken;
     if (!botToken) {
       throw new InternalServerErrorException(
         'Telegram authentication is not configured',
@@ -71,10 +71,8 @@ export class TelegramInitDataService {
 
     if (!/^\d+$/.test(authDate))
       throw new UnauthorizedException('Invalid Telegram initData');
-const ageSeconds = Math.floor(Date.now() / 1000) - Number(authDate);
-    const maximumAge = this.configService.getOrThrow<number>(
-      'TELEGRAM_INIT_DATA_MAX_AGE_SECONDS',
-    );
+    const ageSeconds = Math.floor(Date.now() / 1000) - Number(authDate);
+    const maximumAge = config.initDataMaxAgeSeconds;
     if (ageSeconds < 0 || ageSeconds > maximumAge) {
       throw new UnauthorizedException('Telegram initData has expired');
     }

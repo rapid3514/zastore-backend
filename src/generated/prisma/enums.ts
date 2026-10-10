@@ -19,12 +19,30 @@ export const UserRole = {
 export type UserRole = (typeof UserRole)[keyof typeof UserRole]
 
 
+export const ProductAvailabilityStatus = {
+  IN_STOCK: 'IN_STOCK',
+  ARRIVING_IN_14_DAYS: 'ARRIVING_IN_14_DAYS',
+  OUT_OF_STOCK: 'OUT_OF_STOCK'
+} as const
+
+export type ProductAvailabilityStatus = (typeof ProductAvailabilityStatus)[keyof typeof ProductAvailabilityStatus]
+
+
 export const ProductMediaType = {
   IMAGE: 'IMAGE',
   VIDEO: 'VIDEO'
 } as const
 
 export type ProductMediaType = (typeof ProductMediaType)[keyof typeof ProductMediaType]
+
+
+export const MediaAssetStatus = {
+  ACTIVE: 'ACTIVE',
+  DELETE_PENDING: 'DELETE_PENDING',
+  DELETED: 'DELETED'
+} as const
+
+export type MediaAssetStatus = (typeof MediaAssetStatus)[keyof typeof MediaAssetStatus]
 
 
 export const TelegramProductSyncStatus = {
@@ -103,3 +121,23 @@ export const WeekDay = {
 } as const
 
 export type WeekDay = (typeof WeekDay)[keyof typeof WeekDay]
+
+
+export const NotificationKind = {
+  NEW_ORDER: 'NEW_ORDER',
+  ORDER_STATUS: 'ORDER_STATUS',
+  ORDER_REJECTED: 'ORDER_REJECTED'
+} as const
+
+export type NotificationKind = (typeof NotificationKind)[keyof typeof NotificationKind]
+
+
+export const NotificationDeliveryStatus = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  SENT: 'SENT',
+  FAILED: 'FAILED',
+  UNCERTAIN: 'UNCERTAIN'
+} as const
+
+export type NotificationDeliveryStatus = (typeof NotificationDeliveryStatus)[keyof typeof NotificationDeliveryStatus]

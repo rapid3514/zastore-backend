@@ -1,5 +1,6 @@
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createConfigService } from './helpers/config.js';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
@@ -29,7 +30,7 @@ const paymentId = '33333333-3333-4333-8333-333333333333';
 describe('PaymentsController (e2e)', () => {
   let app: INestApplication;
   let jwt: JwtService;
-  let databaseRole = UserRole.CUSTOMER;
+  let databaseRole: UserRole = UserRole.CUSTOMER;
   const users = {
     findById: vi.fn(() =>
       Promise.resolve({ id: userId, role: databaseRole, isBlocked: false }),
@@ -55,7 +56,7 @@ describe('PaymentsController (e2e)', () => {
         RolesGuard,
         { provide: UsersService, useValue: users },
         { provide: PaymentsService, useValue: payments },
-        { provide: ConfigService, useValue: { getOrThrow: () => secret } },
+        { provide: ConfigService, useValue: createConfigService() },
       ],
     }).compile();
     jwt = moduleRef.get(JwtService);
@@ -82,8 +83,8 @@ describe('PaymentsController (e2e)', () => {
 
   function authorization(role: UserRole) {
     return `Bearer ${jwt.sign(
-      { sub: userId, telegramId: '123', role },
-      { secret, expiresIn: '5m' },
+      { sub: userId, telegramId: '123', role, type: 'access' },
+      { secret, expiresIn: '5m', issuer: 'zastore-shop', audience: 'zastore-mini-app', algorithm: 'HS256' },
     )}`;
   }
 

@@ -1,5 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
-import { OrderStatus, Prisma } from '../../generated/prisma/client.js';
+import {
+  OrderStatus,
+  Prisma,
+  ProductAvailabilityStatus,
+} from '../../generated/prisma/client.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrdersService } from './orders.service.js';
 
@@ -7,6 +11,7 @@ const userId = '11111111-1111-4111-8111-111111111111';
 const orderId = '22222222-2222-4222-8222-222222222222';
 const productId = '33333333-3333-4333-8333-333333333333';
 const secondProductId = '55555555-5555-4555-8555-555555555555';
+const idempotencyKey = '66666666-6666-4666-8666-666666666666';
 
 const order = (overrides: Record<string, unknown> = {}) => ({
   id: orderId,
@@ -52,7 +57,7 @@ const product = (overrides: Record<string, unknown> = {}) => ({
   name: 'Burger',
   price: new Prisma.Decimal('12.50'),
   isActive: true,
-  isAvailable: true,
+  availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
   category: { isActive: true },
   ...overrides,
 });
@@ -60,6 +65,7 @@ const product = (overrides: Record<string, unknown> = {}) => ({
 describe('OrdersService', () => {
   const repository = {
     findById: vi.fn(),
+    findByIdempotencyKey: vi.fn(),
     findUserOrderById: vi.fn(),
     findUserOrders: vi.fn(),
     findManageOrders: vi.fn(),
@@ -76,23 +82,117 @@ describe('OrdersService', () => {
     getNextOpenAt: vi.fn(),
   };
   const auditService = { log: vi.fn() };
-  const notificationsService = {
-    notifyNewOrder: vi.fn(),
-    notifyOrderConfirmed: vi.fn(),
-    notifyOrderRejected: vi.fn(),
-    notifyOrderStatusChanged: vi.fn(),
-  };
   let service: OrdersService;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    repository.findByIdempotencyKey.mockResolvedValue(null);
     service = new OrdersService(
       repository as never,
       usersService as never,
       workHoursService as never,
       auditService as never,
-      notificationsService as never,
     );
+  });
+
+  it.each([
+    0,
+    -1,
+    1001,
+    2147483648,
+    Number.MAX_SAFE_INTEGER,
+    Infinity,
+    NaN,
+    1.5,
+  ])(
+    'rejects invalid quantity %s before any DB product lookup',
+    async (quantity) => {
+      usersService.findById.mockResolvedValue({ id: userId, isBlocked: false });
+      await expect(
+        service.createOrder(
+          { sub: userId },
+          { items: [{ productId, quantity }] },
+          idempotencyKey,
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(repository.findProductsForOrder).not.toHaveBeenCalled();
+      expect(repository.createOrder).not.toHaveBeenCalled();
+    },
+  );
+
+  it('revalidates aggregate duplicate quantities and maximum item count', async () => {
+    usersService.findById.mockResolvedValue({ id: userId, isBlocked: false });
+    await expect(
+      service.createOrder(
+        { sub: userId },
+        {
+          items: [
+            { productId, quantity: 600 },
+            { productId, quantity: 600 },
+          ],
+        },
+        idempotencyKey,
+      ),
+    ).rejects.toMatchObject({ response: { error: 'INVALID_ORDER_QUANTITY' } });
+    await expect(
+      service.createOrder(
+        { sub: userId },
+        {
+          items: Array.from({ length: 101 }, () => ({
+            productId,
+            quantity: 1,
+          })),
+        },
+        idempotencyKey,
+      ),
+    ).rejects.toMatchObject({ response: { error: 'INVALID_ORDER_ITEMS' } });
+  });
+
+  it('rejects Decimal line/total overflow as 400 before persisting', async () => {
+    usersService.findById.mockResolvedValue({ id: userId, isBlocked: false });
+    repository.findProductsForOrder.mockResolvedValue([
+      product({ price: new Prisma.Decimal('99999999.99') }),
+    ]);
+    await expect(
+      service.createOrder(
+        { sub: userId },
+        { items: [{ productId, quantity: 2 }] },
+        idempotencyKey,
+      ),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { error: 'ORDER_TOTAL_LIMIT' },
+    });
+    expect(repository.createOrder).not.toHaveBeenCalled();
+  });
+
+  it('returns an idempotent retry before rechecking changed catalog/work hours and rejects key payload conflicts', async () => {
+    usersService.findById.mockResolvedValue({ id: userId, isBlocked: false });
+    repository.findProductsForOrder.mockResolvedValue([product()]);
+    workHoursService.calculateBusinessDeadline.mockResolvedValue(
+      new Date('2099-01-01'),
+    );
+    repository.createOrder.mockResolvedValue(order());
+    const dto = { items: [{ productId, quantity: 1 }] };
+    await service.createOrder({ sub: userId }, dto, idempotencyKey);
+    const requestHash = repository.createOrder.mock.calls[0][0]
+      .requestHash as string;
+    repository.findByIdempotencyKey.mockResolvedValue(order({ requestHash }));
+    repository.findProductsForOrder.mockClear();
+    workHoursService.calculateBusinessDeadline.mockClear();
+    await expect(
+      service.createOrder({ sub: userId }, dto, idempotencyKey),
+    ).resolves.toMatchObject({ id: orderId });
+    expect(repository.findProductsForOrder).not.toHaveBeenCalled();
+    expect(workHoursService.calculateBusinessDeadline).not.toHaveBeenCalled();
+    await expect(
+      service.createOrder(
+        { sub: userId },
+        { items: [{ productId, quantity: 2 }] },
+        idempotencyKey,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(repository.createOrder).toHaveBeenCalledOnce();
   });
 
   it('merges duplicate items and calculates trusted totals from DB prices', async () => {
@@ -127,6 +227,7 @@ describe('OrdersService', () => {
           { productId, quantity: 2 },
         ],
       },
+      idempotencyKey,
     );
 
     expect(repository.createOrder).toHaveBeenCalledWith(
@@ -149,12 +250,9 @@ describe('OrdersService', () => {
       expect.any(Date),
       240,
     );
-    expect(notificationsService.notifyNewOrder).toHaveBeenCalledWith(
-      expect.objectContaining({ id: orderId }),
-    );
   });
 
-  it('keeps the created order when notification delivery fails', async () => {
+  it('returns the created order without waiting for Telegram delivery', async () => {
     usersService.findById.mockResolvedValue({
       id: userId,
       phone: '+998901234567',
@@ -165,14 +263,12 @@ describe('OrdersService', () => {
       new Date('2026-09-29T13:00:00.000Z'),
     );
     repository.createOrder.mockResolvedValue(order());
-    notificationsService.notifyNewOrder.mockRejectedValue(
-      new Error('Telegram unavailable'),
-    );
 
     await expect(
       service.createOrder(
         { sub: userId },
         { items: [{ productId, quantity: 2 }] },
+        idempotencyKey,
       ),
     ).resolves.toMatchObject({ id: orderId });
     expect(repository.createOrder).toHaveBeenCalledOnce();
@@ -210,6 +306,7 @@ describe('OrdersService', () => {
           { productId: secondProductId, quantity: 3 },
         ],
       },
+      idempotencyKey,
     );
 
     expect(response.total).toBe('350000.00');
@@ -253,7 +350,7 @@ describe('OrdersService', () => {
   it('does not confirm an order whose product became unavailable', async () => {
     repository.findById.mockResolvedValue(order());
     repository.findProductsForOrder.mockResolvedValue([
-      product({ isAvailable: false }),
+      product({ availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK }),
     ]);
 
     await expect(service.confirmOrder(orderId)).rejects.toBeInstanceOf(
@@ -288,9 +385,31 @@ describe('OrdersService', () => {
         entityId: orderId,
       }),
     );
-    expect(notificationsService.notifyOrderConfirmed).toHaveBeenCalledWith(
-      expect.objectContaining({ status: OrderStatus.CONFIRMED }),
+  });
+
+  it('allows ordering a product that arrives in 14 days', async () => {
+    usersService.findById.mockResolvedValue({
+      id: userId,
+      phone: '+998901234567',
+      isBlocked: false,
+    });
+    repository.findProductsForOrder.mockResolvedValue([
+      product({
+        availabilityStatus: ProductAvailabilityStatus.ARRIVING_IN_14_DAYS,
+      }),
+    ]);
+    repository.createOrder.mockResolvedValue(order());
+    workHoursService.calculateBusinessDeadline.mockResolvedValue(
+      new Date('2026-10-08T12:00:00.000Z'),
     );
+
+    await expect(
+      service.createOrder(
+        { sub: userId },
+        { items: [{ productId, quantity: 1 }] },
+        idempotencyKey,
+      ),
+    ).resolves.toMatchObject({ id: orderId });
   });
 
   it('rejects only pending orders by mapping rejection to CANCELLED', async () => {
@@ -308,9 +427,7 @@ describe('OrdersService', () => {
         status: OrderStatus.CANCELLED,
         cancelReason: 'Mahsulot qolmagan',
       }),
-    );
-    expect(notificationsService.notifyOrderRejected).toHaveBeenCalledWith(
-      expect.objectContaining({ status: OrderStatus.CANCELLED }),
+      true,
     );
   });
 
@@ -324,9 +441,6 @@ describe('OrdersService', () => {
     await expect(
       service.updateOrderStatus(orderId, nextStatus, userId),
     ).resolves.toMatchObject({ status: nextStatus });
-    expect(notificationsService.notifyOrderStatusChanged).toHaveBeenCalledWith(
-      expect.objectContaining({ status: nextStatus }),
-    );
   });
 
   it.each([

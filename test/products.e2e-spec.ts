@@ -4,6 +4,7 @@ import {
   type INestApplication,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createConfigService } from './helpers/config.js';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
@@ -21,6 +22,7 @@ import { JwtAuthGuard } from '../src/common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../src/common/guards/roles.guard.js';
 import {
   Prisma,
+  ProductAvailabilityStatus,
   ProductMediaType,
   TelegramProductSyncStatus,
   UserRole,
@@ -44,11 +46,12 @@ const product = {
   name: 'Burger',
   description: null,
   price: new Prisma.Decimal('12000.00'),
+  cargoPrice: null,
   imageUrl: null,
   categoryId,
   category: { id: categoryId, name: 'Burgerlar', slug: 'burgerlar' },
-  isAvailable: true,
-  isActive: true,
+  availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
+  version: 0,
   createdAt: new Date('2026-09-24T00:00:00.000Z'),
   updatedAt: new Date('2026-09-24T00:00:00.000Z'),
 };
@@ -65,14 +68,20 @@ describe('ProductsController (e2e)', () => {
     findById: vi.fn(),
     create: vi.fn(),
     createWithMedia: vi.fn(),
+    createInTransaction: vi.fn(),
+    createWithMediaInTransaction: vi.fn(),
     update: vi.fn(),
     replaceMedia: vi.fn(),
+    updateInTransaction: vi.fn(),
+    replaceMediaInTransaction: vi.fn(),
+    removeOrDeactivate: vi.fn(),
     delete: vi.fn(),
   };
   const mediaService = {
     verifyProductImage: vi.fn(),
     verifyProductMedia: vi.fn(),
     deleteImageIfUnreferenced: vi.fn(),
+    withReservedAssets: vi.fn(),
   };
   const telegramPublisher = {
     syncAfterCreate: vi.fn(),
@@ -103,7 +112,7 @@ describe('ProductsController (e2e)', () => {
         },
         { provide: AuditService, useValue: { log: vi.fn() } },
         { provide: UsersService, useValue: usersService },
-        { provide: ConfigService, useValue: { getOrThrow: () => secret } },
+        { provide: ConfigService, useValue: createConfigService() },
       ],
     }).compile();
     jwtService = moduleRef.get(JwtService);
@@ -131,10 +140,14 @@ describe('ProductsController (e2e)', () => {
       isActive: true,
     });
     repository.countOrderItems.mockResolvedValue(0);
+    repository.removeOrDeactivate.mockResolvedValue({ product, softDeleted: false });
     repository.list.mockResolvedValue({ data: [product], total: 1 });
     repository.findPublicById.mockResolvedValue(product);
     repository.findById.mockResolvedValue(product);
     repository.create.mockResolvedValue(product);
+    repository.createInTransaction.mockImplementation(
+      (_transaction: unknown, data: Record<string, unknown>) => repository.create(data),
+    );
     repository.createWithMedia.mockImplementation(
       (data: Record<string, unknown>, media: Record<string, unknown>[]) =>
         Promise.resolve({
@@ -150,7 +163,19 @@ describe('ProductsController (e2e)', () => {
           telegramMessages: [],
         }),
     );
-    repository.update.mockResolvedValue({ ...product, isAvailable: false });
+    repository.createWithMediaInTransaction.mockImplementation(
+      (_transaction: unknown, data: Record<string, unknown>, media: Record<string, unknown>[]) => repository.createWithMedia(data, media),
+    );
+    repository.update.mockResolvedValue({
+      ...product,
+      availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK,
+    });
+    repository.updateInTransaction.mockImplementation(
+      (_transaction: unknown, id: string, data: Record<string, unknown>, version: number) => repository.update(id, data, version),
+    );
+    repository.replaceMediaInTransaction.mockImplementation(
+      (_transaction: unknown, id: string, data: Record<string, unknown>, media: Record<string, unknown>[], version: number) => repository.replaceMedia(id, data, media, version),
+    );
     repository.delete.mockResolvedValue(product);
     mediaService.verifyProductImage.mockResolvedValue({
       fileId: 'verified-file',
@@ -174,6 +199,9 @@ describe('ProductsController (e2e)', () => {
         }),
     );
     mediaService.deleteImageIfUnreferenced.mockResolvedValue(true);
+    mediaService.withReservedAssets.mockImplementation(
+      (_assets: unknown, operation: (transaction: object) => Promise<unknown>) => operation({}),
+    );
     telegramPublisher.syncAfterCreate.mockImplementation((value) =>
       Promise.resolve(value),
     );
@@ -192,8 +220,8 @@ describe('ProductsController (e2e)', () => {
 
   function token(role: UserRole) {
     return jwtService.sign(
-      { sub: userId, telegramId: '123456789', role },
-      { secret, expiresIn: '5m' },
+      { sub: userId, telegramId: '123456789', role, type: 'access' },
+      { secret, expiresIn: '5m', issuer: 'zastore-shop', audience: 'zastore-mini-app', algorithm: 'HS256' },
     );
   }
 
@@ -222,17 +250,6 @@ describe('ProductsController (e2e)', () => {
     await request(app.getHttpServer())
       .get(`/api/v1/products/${productId}`)
       .expect(200);
-  });
-
-  it('never exposes inactive products through the public list', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/api/v1/products?isActive=false')
-      .expect(200);
-    expect(response.body).toEqual({
-      data: [],
-      meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
-    });
-    expect(repository.list).not.toHaveBeenCalled();
   });
 
   it('rejects customer create and allows ADMIN and SUPER_ADMIN create', async () => {
@@ -264,8 +281,7 @@ describe('ProductsController (e2e)', () => {
         name: 'Burger',
         price: 12000,
         categoryId,
-        isAvailable: true,
-        isActive: true,
+        availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
       }),
     );
   });
@@ -297,6 +313,64 @@ describe('ProductsController (e2e)', () => {
       .set('Authorization', authorization)
       .send({ ...createInput, name: undefined })
       .expect(400);
+  });
+
+  it('requires cargo price only for products arriving in 14 days', async () => {
+    const authorization = `Bearer ${token(UserRole.ADMIN)}`;
+    const arriving = ProductAvailabilityStatus.ARRIVING_IN_14_DAYS;
+
+    for (const input of [
+      { ...createInput, availabilityStatus: arriving },
+      { ...createInput, availabilityStatus: arriving, cargoPrice: 0 },
+      { ...createInput, cargoPrice: 5000 },
+      {
+        ...createInput,
+        availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK,
+        cargoPrice: 5000,
+      },
+    ]) {
+      await request(app.getHttpServer())
+        .post('/api/v1/products')
+        .set('Authorization', authorization)
+        .send(input)
+        .expect(400);
+    }
+    expect(repository.create).not.toHaveBeenCalled();
+
+    repository.create.mockImplementationOnce((data) =>
+      Promise.resolve({
+        ...product,
+        ...data,
+        price: new Prisma.Decimal(data.price),
+        cargoPrice: new Prisma.Decimal(data.cargoPrice),
+      }),
+    );
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/products')
+      .set('Authorization', authorization)
+      .send({
+        ...createInput,
+        availabilityStatus: arriving,
+        cargoPrice: '5000.50',
+      })
+      .expect(201);
+
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        availabilityStatus: arriving,
+        cargoPrice: 5000.5,
+      }),
+    );
+    expect(response.body.cargoPrice).toBe('5000.50');
+    repository.findPublicById.mockResolvedValueOnce({
+      ...product,
+      availabilityStatus: arriving,
+      cargoPrice: new Prisma.Decimal('5000.50'),
+    });
+    const publicResponse = await request(app.getHttpServer())
+      .get(`/api/v1/products/${productId}`)
+      .expect(200);
+    expect(publicResponse.body.cargoPrice).toBe('5000.50');
   });
 
   it('creates with verified ImageKit metadata and Telegram success', async () => {
@@ -499,6 +573,7 @@ describe('ProductsController (e2e)', () => {
 
   it('rejects client-controlled Telegram sync fields', async () => {
     const injectedFields = {
+      isActive: false,
       telegramChannelMessageId: 999,
       telegramSyncStatus: TelegramProductSyncStatus.SYNCED,
       telegramPublishedAt: new Date().toISOString(),
@@ -545,18 +620,80 @@ describe('ProductsController (e2e)', () => {
     const response = await request(app.getHttpServer())
       .patch(`/api/v1/products/${productId}`)
       .set('Authorization', authorization)
-      .send({ isAvailable: false })
+      .send({ availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK })
       .expect(200);
-    expect(response.body.isAvailable).toBe(false);
+    expect(response.body.availabilityStatus).toBe(
+      ProductAvailabilityStatus.OUT_OF_STOCK,
+    );
     expect(repository.update).toHaveBeenCalledWith(productId, {
-      isAvailable: false,
-    });
+      availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK,
+    }, 0);
 
     await request(app.getHttpServer())
       .delete(`/api/v1/products/${productId}`)
       .set('Authorization', authorization)
       .expect(204);
-    expect(repository.delete).toHaveBeenCalledWith(productId);
+    expect(repository.removeOrDeactivate).toHaveBeenCalledWith(productId, 0);
+  });
+
+  it('requires cargo price on status change and clears it when leaving 14 days', async () => {
+    const authorization = `Bearer ${token(UserRole.ADMIN)}`;
+    const url = `/api/v1/products/${productId}`;
+    const arriving = ProductAvailabilityStatus.ARRIVING_IN_14_DAYS;
+
+    await request(app.getHttpServer())
+      .patch(url)
+      .set('Authorization', authorization)
+      .send({ availabilityStatus: arriving })
+      .expect(400);
+    expect(repository.update).not.toHaveBeenCalled();
+
+    const arrivingProduct = {
+      ...product,
+      availabilityStatus: arriving,
+      cargoPrice: new Prisma.Decimal('5000.50'),
+    };
+    repository.update.mockResolvedValueOnce(arrivingProduct);
+    const response = await request(app.getHttpServer())
+      .patch(url)
+      .set('Authorization', authorization)
+      .send({ availabilityStatus: arriving, cargoPrice: 5000.5 })
+      .expect(200);
+    expect(response.body.cargoPrice).toBe('5000.50');
+    expect(repository.update).toHaveBeenCalledWith(productId, {
+      availabilityStatus: arriving,
+      cargoPrice: 5000.5,
+    }, 0);
+
+    repository.findById.mockResolvedValue(arrivingProduct);
+    repository.update.mockResolvedValueOnce({
+      ...arrivingProduct,
+      name: 'Yangi nom',
+    });
+    const renamed = await request(app.getHttpServer())
+      .patch(url)
+      .set('Authorization', authorization)
+      .send({ name: 'Yangi nom' })
+      .expect(200);
+    expect(repository.update).toHaveBeenLastCalledWith(productId, {
+      name: 'Yangi nom',
+    }, 0);
+    expect(renamed.body.cargoPrice).toBe('5000.50');
+
+    repository.update.mockResolvedValueOnce({
+      ...product,
+      availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
+    });
+    const inStock = await request(app.getHttpServer())
+      .patch(url)
+      .set('Authorization', authorization)
+      .send({ availabilityStatus: ProductAvailabilityStatus.IN_STOCK })
+      .expect(200);
+    expect(repository.update).toHaveBeenLastCalledWith(productId, {
+      availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
+      cargoPrice: null,
+    }, 0);
+    expect(inStock.body).not.toHaveProperty('cargoPrice');
   });
 
   it('lets ADMIN update name, price, and category', async () => {
@@ -582,7 +719,7 @@ describe('ProductsController (e2e)', () => {
       name: 'Cheeseburger',
       price: 15000,
       categoryId: nextCategoryId,
-    });
+    }, 0);
   });
 
   it('updates a verified image, syncs Telegram media, then cleans old media', async () => {
@@ -618,7 +755,7 @@ describe('ProductsController (e2e)', () => {
     expect(repository.update).toHaveBeenCalledWith(productId, {
       imageUrl: 'https://ik.imagekit.io/account/products/verified.jpg',
       imageFileId: 'verified-file',
-    });
+    }, 0);
     expect(telegramPublisher.syncAfterUpdate).toHaveBeenCalledWith(
       updated,
       true,
@@ -654,26 +791,22 @@ describe('ProductsController (e2e)', () => {
   });
 
   it('soft-deletes a product referenced by historical orders', async () => {
-    repository.countOrderItems.mockResolvedValue(1);
+    repository.removeOrDeactivate.mockResolvedValue({ product: { ...product, availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK }, softDeleted: true });
 
     await request(app.getHttpServer())
       .delete(`/api/v1/products/${productId}`)
       .set('Authorization', `Bearer ${token(UserRole.ADMIN)}`)
       .expect(204);
 
-    expect(repository.update).toHaveBeenCalledWith(productId, {
-      isActive: false,
-      isAvailable: false,
-    });
-    expect(repository.delete).not.toHaveBeenCalled();
+    expect(repository.removeOrDeactivate).toHaveBeenCalledWith(productId, 0);
   });
 
-  it('lets ADMIN list inactive products through manage', async () => {
+  it('lets ADMIN filter products by availability through manage', async () => {
     await request(app.getHttpServer())
-      .get('/api/v1/products/manage?isActive=false')
+      .get('/api/v1/products/manage?availabilityStatus=OUT_OF_STOCK')
       .set('Authorization', `Bearer ${token(UserRole.ADMIN)}`)
       .expect(200);
-    expect(repository.list).toHaveBeenCalledWith({ isActive: false }, true);
+    expect(repository.list).toHaveBeenCalledWith({ availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK }, true);
   });
 
   it('hides sync metadata publicly and returns it through manage', async () => {
@@ -693,7 +826,7 @@ describe('ProductsController (e2e)', () => {
     const publicResponse = await request(app.getHttpServer())
       .get('/api/v1/products')
       .expect(200);
-    expect(publicResponse.body.data[0].imageUrl).toBe(managedProduct.imageUrl);
+    expect(publicResponse.body.data[0].imageUrl).toContain(`${managedProduct.imageUrl}?tr=w-480`);
     expect(publicResponse.body.data[0]).not.toHaveProperty('imageFileId');
     expect(publicResponse.body.data[0]).not.toHaveProperty(
       'telegramChannelMessageId',
@@ -749,8 +882,11 @@ describe('ProductsController (e2e)', () => {
     const publicDetail = await request(app.getHttpServer())
       .get(`/api/v1/products/${productId}`)
       .expect(200);
-    for (const item of [publicList.body.data[0], publicDetail.body]) {
-      expect(item.media[0]).toEqual({
+    expect(publicList.body.data[0]).not.toHaveProperty('media');
+    expect(publicList.body.data[0]).not.toHaveProperty('description');
+    expect(publicList.body.data[0].imageVariants.card).toContain('w-480');
+    for (const item of [publicDetail.body]) {
+      expect(item.media[0]).toMatchObject({
         id: '55555555-5555-4555-8555-555555555555',
         type: ProductMediaType.IMAGE,
         url: 'https://ik.imagekit.io/account/products/one.jpg',

@@ -1,7 +1,9 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -31,8 +33,24 @@ export class OrdersController {
   create(
     @CurrentUser() actor: AuthenticatedUser,
     @Body() input: CreateOrderDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.ordersService.createOrder(actor, input);
+    if (
+      !idempotencyKey ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        idempotencyKey,
+      )
+    ) {
+      throw new BadRequestException({
+        error: 'INVALID_IDEMPOTENCY_KEY',
+        message: 'Idempotency-Key UUID header is required',
+      });
+    }
+    return this.ordersService.createOrder(
+      actor,
+      input,
+      idempotencyKey.toLowerCase(),
+    );
   }
 
   @Get('my')

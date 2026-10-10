@@ -66,22 +66,44 @@ export class AuthService {
     const session = await this.authRepository.findRefreshSession(payload.sid);
     if (
       !session ||
-      session.revokedAt ||
       session.expiresAt <= new Date() ||
-      session.userId !== payload.sub
+      session.userId !== payload.sub ||
+      session.familyId !== payload.fid
     ) {
       throw new UnauthorizedException('Invalid refresh session');
     }
     if (!(await argon2.verify(session.tokenHash, refreshToken))) {
       throw new UnauthorizedException('Invalid refresh session');
     }
-
-    await this.authRepository.revokeRefreshSession(session.id);
-    const user = await this.usersService.findById(payload.sub);
-    if (!user || user.isBlocked) {
+    if (session.revokedAt) {
+      await this.authRepository.revokeRefreshFamily(
+        session.familyId,
+        session.userId,
+      );
       throw new UnauthorizedException('Invalid refresh session');
     }
-    return this.issueForUser(user);
+    const user = await this.usersService.findById(payload.sub);
+    if (!user || user.isBlocked) {
+      await this.authRepository.revokeRefreshFamily(
+        session.familyId,
+        session.userId,
+      );
+      throw new UnauthorizedException('Invalid refresh session');
+    }
+    const accessPayload = this.accessPayload(user);
+    const replacement = await this.prepareRefreshSession(
+      accessPayload,
+      session.familyId,
+      session.id,
+    );
+    const rotated = await this.authRepository.rotateRefreshSession(
+      session.id,
+      replacement.session,
+    );
+    // A request that observed an active token but lost the atomic consume race
+    // must not revoke the successful concurrent request's replacement.
+    if (!rotated) throw new UnauthorizedException('Invalid refresh session');
+    return this.authResult(user, accessPayload, replacement.token);
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -89,11 +111,11 @@ export class AuthService {
     const session = await this.authRepository.findRefreshSession(payload.sid);
     if (
       session &&
-      !session.revokedAt &&
       session.userId === payload.sub &&
+      session.familyId === payload.fid &&
       (await argon2.verify(session.tokenHash, refreshToken))
     ) {
-      await this.authRepository.revokeRefreshSession(session.id);
+      await this.authRepository.revokeRefreshFamily(session.familyId, session.userId);
     }
   }
 
@@ -110,12 +132,24 @@ export class AuthService {
   }
 
   private async issueForUser(user: User): Promise<AuthResult> {
-    const accessPayload: AccessTokenPayload = {
+    const accessPayload = this.accessPayload(user);
+    const refreshToken = await this.createRefreshToken(accessPayload);
+    return this.authResult(user, accessPayload, refreshToken);
+  }
+
+  private accessPayload(user: User): AccessTokenPayload {
+    return {
       sub: user.id,
       telegramId: user.telegramId.toString(),
       role: user.role,
     };
-    const refreshToken = await this.createRefreshToken(accessPayload);
+  }
+
+  private async authResult(
+    user: User,
+    accessPayload: AccessTokenPayload,
+    refreshToken: string,
+  ): Promise<AuthResult> {
     return {
       refreshToken,
       body: {
@@ -129,16 +163,31 @@ export class AuthService {
   private async createRefreshToken(
     accessPayload: AccessTokenPayload,
   ): Promise<string> {
+    const prepared = await this.prepareRefreshSession(accessPayload);
+    await this.authRepository.createRefreshSession(prepared.session);
+    return prepared.token;
+  }
+
+  private async prepareRefreshSession(
+    accessPayload: AccessTokenPayload,
+    familyId?: string,
+    parentId?: string,
+  ) {
     const sid = randomUUID();
-    const payload: RefreshTokenPayload = { ...accessPayload, sid };
-    const refreshToken = await this.tokenService.signRefresh(payload);
-    await this.authRepository.createRefreshSession({
-      id: sid,
-      tokenHash: await argon2.hash(refreshToken),
-      expiresAt: this.tokenService.refreshExpiresAt(),
-      userId: accessPayload.sub,
-    });
-    return refreshToken;
+    const fid = familyId ?? sid;
+    const payload: RefreshTokenPayload = { ...accessPayload, sid, fid };
+    const token = await this.tokenService.signRefresh(payload);
+    return {
+      token,
+      session: {
+        id: sid,
+        familyId: fid,
+        parentId,
+        tokenHash: await argon2.hash(token),
+        expiresAt: this.tokenService.refreshExpiresAt(),
+        userId: accessPayload.sub,
+      },
+    };
   }
 
   private presentUser(user: User): Record<string, unknown> {
@@ -157,5 +206,4 @@ export class AuthService {
       updatedAt: user.updatedAt,
     };
   }
-
 }

@@ -7,6 +7,7 @@ import {
 } from '../../generated/prisma/client.js';
 import type { WorkHourScheduleEntry } from './work-hours.repository.js';
 import { WorkHoursService } from './work-hours.service.js';
+import { createConfigService } from '../../../test/helpers/config.js';
 
 const schedule: WorkHourScheduleEntry[] = [
   {
@@ -58,14 +59,57 @@ function serviceWithSchedule(
     upsertMany: vi.fn(),
   };
 
-  const config = {
-    getOrThrow: vi.fn().mockReturnValue(timeZone),
-  };
-
-  return new WorkHoursService(repo as any, config as any);
+  return new WorkHoursService(
+    repo as never,
+    createConfigService({ TZ: timeZone }),
+  );
 }
 
 describe('WorkHoursService', () => {
+  it('rejects an all-closed schedule promptly while timers remain responsive', async () => {
+    const closed = schedule.map((entry) => ({
+      ...entry,
+      isOpen: false,
+      openTime: null,
+      closeTime: null,
+    }));
+    const service = serviceWithSchedule(closed);
+    const timer = new Promise<boolean>((resolve) =>
+      setTimeout(() => resolve(true), 0),
+    );
+    await expect(
+      service.calculateBusinessDeadline(new Date(), 240),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { error: 'STORE_CLOSED' },
+    });
+    await expect(timer).resolves.toBe(true);
+  });
+
+  it.each([
+    { openTime: null, closeTime: '18:00' },
+    { openTime: '09:00', closeTime: null },
+    { openTime: '09:00', closeTime: '09:00' },
+    { openTime: '25:00', closeTime: '26:00' },
+  ])('rejects invalid open intervals %j', async (interval) => {
+    await expect(
+      serviceWithSchedule().updateSchedule([
+        { dayOfWeek: WeekDay.MONDAY, isOpen: true, ...interval },
+      ]),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('bounds deadline search for a valid but impractically sparse schedule', async () => {
+    const sparse = schedule.map((entry) => ({
+      ...entry,
+      isOpen: entry.dayOfWeek === WeekDay.MONDAY,
+      openTime: '09:00',
+      closeTime: '09:01',
+    }));
+    await expect(
+      serviceWithSchedule(sparse).calculateBusinessDeadline(new Date(), 240),
+    ).rejects.toMatchObject({ response: { error: 'BUSINESS_DEADLINE_LIMIT' } });
+  });
   it('rejects an opening time that is not before closing time', async () => {
     const service = serviceWithSchedule();
 
@@ -87,10 +131,7 @@ describe('WorkHoursService', () => {
       createDefaultSchedule: vi.fn(),
       upsertMany: vi.fn().mockResolvedValue([]),
     };
-    const service = new WorkHoursService(
-      repo as never,
-      { getOrThrow: () => 'Asia/Tashkent' } as never,
-    );
+    const service = new WorkHoursService(repo as never, createConfigService());
 
     await service.updateSchedule([
       { dayOfWeek: WeekDay.SUNDAY, isOpen: false },
@@ -115,7 +156,7 @@ describe('WorkHoursService', () => {
     const audit = { log: vi.fn().mockResolvedValue(undefined) };
     const service = new WorkHoursService(
       repo as never,
-      { getOrThrow: () => 'Asia/Tashkent' } as never,
+      createConfigService(),
       audit as never,
     );
 

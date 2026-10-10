@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { getConfiguration } from '../../config/configuration.js';
 import { WeekDay } from '../../generated/prisma/client.js';
 import { AuditAction, AuditEntityType } from '../../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -57,14 +58,14 @@ export class WorkHoursService {
     configService: ConfigService,
     private readonly auditService?: AuditService,
   ) {
-    this.timeZone = configService.getOrThrow<string>('TZ');
+    this.timeZone = getConfiguration(configService).app.timeZone;
   }
 
   async getSchedule(): Promise<WorkHourScheduleEntry[]> {
     const schedule = await this.workHoursRepository.findSchedule();
     if (!schedule.length) {
       await this.workHoursRepository.createDefaultSchedule();
-      return this.getSchedule();
+      return DEFAULT_SCHEDULE.map((entry) => ({ ...entry }));
     }
 
     return Object.values(WeekDay).map((day) => {
@@ -73,8 +74,8 @@ export class WorkHoursService {
       return {
         dayOfWeek: day,
         isOpen: entry?.isOpen ?? fallback?.isOpen ?? false,
-        openTime: entry?.openTime ?? fallback?.openTime ?? null,
-        closeTime: entry?.closeTime ?? fallback?.closeTime ?? null,
+        openTime: entry ? entry.openTime : (fallback?.openTime ?? null),
+        closeTime: entry ? entry.closeTime : (fallback?.closeTime ?? null),
       };
     });
   }
@@ -91,24 +92,11 @@ export class WorkHoursService {
     const normalized = entries.map((entry) => ({
       dayOfWeek: entry.dayOfWeek,
       isOpen: entry.isOpen,
-      openTime: entry.isOpen ? (entry.openTime ?? '09:00') : null,
-      closeTime: entry.isOpen ? (entry.closeTime ?? '18:00') : null,
+      openTime: entry.isOpen ? (entry.openTime ?? null) : null,
+      closeTime: entry.isOpen ? (entry.closeTime ?? null) : null,
     }));
 
-    for (const entry of normalized) {
-      if (
-        entry.isOpen &&
-        entry.openTime &&
-        entry.closeTime &&
-        this.toMinutesFromClock(entry.openTime) >=
-          this.toMinutesFromClock(entry.closeTime)
-      ) {
-        throw new BadRequestException({
-          error: 'INVALID_WORK_HOURS',
-          message: "openTime closeTime dan oldin bo'lishi kerak",
-        });
-      }
-    }
+    this.validateSchedule(normalized);
 
     await this.workHoursRepository.upsertMany(normalized);
     if (actorUserId) {
@@ -207,10 +195,28 @@ export class WorkHoursService {
     durationMinutes: number,
   ): Promise<Date> {
     const schedule = await this.getSchedule();
-    let remaining = Math.max(0, durationMinutes);
+    this.validateSchedule(schedule);
+    if (
+      !Number.isSafeInteger(durationMinutes) ||
+      durationMinutes < 0 ||
+      !Number.isFinite(startDate.getTime())
+    ) {
+      throw new BadRequestException({
+        error: 'INVALID_DEADLINE',
+        message: 'Invalid business deadline input',
+      });
+    }
+    if (!schedule.some((entry) => entry.isOpen)) {
+      throw new BadRequestException({
+        error: 'STORE_CLOSED',
+        message: 'Do‘konning barcha ish kunlari yopiq',
+      });
+    }
+    let remaining = durationMinutes;
     let current = this.getBusinessDateParts(startDate);
 
-    while (remaining > 0) {
+    // At most one year of business dates, including sparse one-minute schedules.
+    for (let iteration = 0; iteration < 366 && remaining > 0; iteration += 1) {
       const day = this.resolveDayFromLocalParts(current);
       const slot = schedule.find((entry) => entry.dayOfWeek === day);
 
@@ -226,17 +232,17 @@ export class WorkHoursService {
       if (currentMinutes < openMinutes) {
         current.hours = Math.floor(openMinutes / 60);
         current.minutes = openMinutes % 60;
-        continue;
       }
 
-      if (currentMinutes >= closeMinutes) {
+      const effectiveMinutes = Math.max(currentMinutes, openMinutes);
+      if (effectiveMinutes >= closeMinutes) {
         this.advanceBusinessDate(current);
         continue;
       }
 
-      const availableMinutes = closeMinutes - currentMinutes;
+      const availableMinutes = closeMinutes - effectiveMinutes;
       if (remaining <= availableMinutes) {
-        const totalMinutes = currentMinutes + remaining;
+        const totalMinutes = effectiveMinutes + remaining;
         current.hours = Math.floor(totalMinutes / 60);
         current.minutes = totalMinutes % 60;
         return this.dateFromBusinessLocalParts(current);
@@ -246,7 +252,37 @@ export class WorkHoursService {
       this.advanceBusinessDate(current);
     }
 
+    if (remaining > 0) {
+      throw new BadRequestException({
+        error: 'BUSINESS_DEADLINE_LIMIT',
+        message:
+          'Ish jadvali tasdiqlash muddatini hisoblash uchun yetarli emas',
+      });
+    }
     return this.dateFromBusinessLocalParts(current);
+  }
+
+  private validateSchedule(entries: WorkHourScheduleEntry[]): void {
+    const clock = /^([01]\d|2[0-3]):[0-5]\d$/;
+    const days = new Set<WeekDay>();
+    for (const entry of entries) {
+      if (
+        days.has(entry.dayOfWeek) ||
+        (entry.isOpen &&
+          (!entry.openTime ||
+            !entry.closeTime ||
+            !clock.test(entry.openTime) ||
+            !clock.test(entry.closeTime) ||
+            entry.openTime >= entry.closeTime))
+      ) {
+        throw new BadRequestException({
+          error: 'INVALID_WORK_HOURS',
+          message:
+            'Ochiq kun uchun openTime va closeTime to‘g‘ri oraliq bo‘lishi shart',
+        });
+      }
+      days.add(entry.dayOfWeek);
+    }
   }
 
   private resolveDay(date: Date): WeekDay {

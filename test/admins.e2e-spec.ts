@@ -1,5 +1,6 @@
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createConfigService } from './helpers/config.js';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
@@ -41,7 +42,7 @@ describe('AdminsController access (e2e)', () => {
         JwtStrategy,
         JwtAuthGuard,
         RolesGuard,
-        { provide: ConfigService, useValue: { getOrThrow: () => secret } },
+        { provide: ConfigService, useValue: createConfigService() },
         { provide: UsersService, useValue: usersService },
         { provide: AdminsService, useValue: adminsService },
       ],
@@ -109,8 +110,8 @@ describe('AdminsController access (e2e)', () => {
 
   function token(id: string, role: UserRole): string {
     return jwtService.sign(
-      { sub: id, telegramId: '123456789', role },
-      { secret, expiresIn: '5m' },
+      { sub: id, telegramId: '123456789', role, type: 'access' },
+      { secret, expiresIn: '5m', issuer: 'zastore-shop', audience: 'zastore-mini-app', algorithm: 'HS256' },
     );
   }
 

@@ -7,6 +7,7 @@ import {
   Req,
   Res,
   UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
@@ -16,6 +17,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../../common/types/auth-user.type.js';
 import { TelegramAuthDto } from './dto/telegram-auth.dto.js';
 import { AuthService } from './auth.service.js';
+import { getConfiguration } from '../../config/configuration.js';
 
 const REFRESH_COOKIE = 'refresh_token';
 
@@ -87,7 +89,11 @@ export class AuthController {
       .map((part) => part.trim())
       .find((part) => part.startsWith(`${REFRESH_COOKIE}=`));
     if (!cookie) return '';
-    return decodeURIComponent(cookie.slice(`${REFRESH_COOKIE}=`.length));
+    try {
+      return decodeURIComponent(cookie.slice(`${REFRESH_COOKIE}=`.length));
+    } catch {
+      throw new UnauthorizedException('Invalid refresh session');
+    }
   }
 
   private setRefreshCookie(response: Response, token?: string): void {
@@ -99,15 +105,12 @@ export class AuthController {
   }
 
   private cookieOptions() {
-    const apiPrefix = this.configService
-      .getOrThrow<string>('API_PREFIX')
-      .replace(/^\/+|\/+$/g, '');
+    const config = getConfiguration(this.configService).app;
     return {
       httpOnly: true,
-      secure:
-        this.configService.getOrThrow<string>('NODE_ENV') === 'production',
+      secure: config.isProduction,
       sameSite: 'lax' as const,
-      path: `/${apiPrefix}/auth`,
+      path: `/${config.apiPrefix}/auth`,
     };
   }
 }

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,10 +10,13 @@ import {
 import {
   AuditAction,
   AuditEntityType,
+  ProductAvailabilityStatus,
   ProductMediaType,
   TelegramProductSyncStatus,
+  type Prisma,
 } from '../../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
+import { imageVariants } from '../media/image-variants.js';
 import {
   MediaService,
   type VerifiedMediaAsset,
@@ -26,6 +30,7 @@ import {
   ProductsRepository,
   type ProductData,
   type ProductMediaData,
+  type PublicProductCard,
 } from './products.repository.js';
 
 const productNotFound = () =>
@@ -64,10 +69,9 @@ export class ProductsService {
   ) {}
 
   async findPublic(query: QueryProductsDto) {
-    if (query.isActive === false) return this.paginate([], 0, query);
     const { data, total } = await this.productsRepository.list(query, false);
     return this.paginate(
-      data.map((product) => this.toPublicResponse(product)),
+      data.map((product) => this.toCardResponse(product)),
       total,
       query,
     );
@@ -96,6 +100,9 @@ export class ProductsService {
 
   async create(dto: CreateProductDto, actorUserId?: string) {
     this.assertExclusiveInputs(dto.image, dto.media);
+    const availabilityStatus =
+      dto.availabilityStatus ?? ProductAvailabilityStatus.IN_STOCK;
+    this.assertCargoPrice(availabilityStatus, dto.cargoPrice);
     await this.ensureCategory(dto.categoryId);
     const requestedMedia = dto.media?.length ? dto.media : undefined;
     if (requestedMedia) this.validateMediaSet(requestedMedia);
@@ -113,17 +120,31 @@ export class ProductsService {
       name: dto.name.trim(),
       description: this.optionalText(dto.description),
       price: dto.price,
+      cargoPrice: dto.cargoPrice ?? null,
       imageUrl: primaryImage?.url ?? legacyImage?.url ?? null,
       imageFileId: primaryImage?.fileId ?? legacyImage?.fileId ?? null,
       categoryId: dto.categoryId,
-      isAvailable: dto.isAvailable ?? true,
-      isActive: dto.isActive ?? true,
+      availabilityStatus,
       telegramSyncStatus: TelegramProductSyncStatus.PENDING,
     };
+    const assetsToReserve = legacyImage ? [...media, legacyImage] : media;
 
     try {
-      let product = media.length
-        ? await this.productsRepository.createWithMedia(data, media)
+      let product = assetsToReserve.length
+        ? await this.getMediaService().withReservedAssets(
+            assetsToReserve,
+            (transaction) =>
+              media.length
+                ? this.productsRepository.createWithMediaInTransaction(
+                    transaction,
+                    data,
+                    media,
+                  )
+                : this.productsRepository.createInTransaction(
+                    transaction,
+                    data,
+                  ),
+          )
         : await this.productsRepository.create(data);
       if (actorUserId) {
         await this.auditService?.log({
@@ -155,6 +176,15 @@ export class ProductsService {
     this.assertExclusiveInputs(dto.image, dto.media);
     const existing = await this.productsRepository.findById(id);
     if (!existing) throw productNotFound();
+    const availabilityStatus =
+      dto.availabilityStatus ?? existing.availabilityStatus;
+    const cargoPrice =
+      availabilityStatus === ProductAvailabilityStatus.ARRIVING_IN_14_DAYS
+        ? dto.cargoPrice === undefined
+          ? existing.cargoPrice
+          : dto.cargoPrice
+        : dto.cargoPrice;
+    this.assertCargoPrice(availabilityStatus, cargoPrice);
     if (dto.categoryId !== undefined) await this.ensureCategory(dto.categoryId);
 
     const data: Partial<ProductData> = {};
@@ -162,14 +192,23 @@ export class ProductsService {
     if (dto.description !== undefined)
       data.description = this.optionalText(dto.description);
     if (dto.price !== undefined) data.price = dto.price;
+    if (availabilityStatus === ProductAvailabilityStatus.ARRIVING_IN_14_DAYS) {
+      if (dto.cargoPrice !== undefined) data.cargoPrice = dto.cargoPrice;
+    } else if (
+      existing.cargoPrice !== null &&
+      existing.cargoPrice !== undefined
+    ) {
+      data.cargoPrice = null;
+    }
     if (dto.categoryId !== undefined) data.categoryId = dto.categoryId;
-    if (dto.isAvailable !== undefined) data.isAvailable = dto.isAvailable;
-    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.availabilityStatus !== undefined)
+      data.availabilityStatus = dto.availabilityStatus;
 
     const oldMedia = existing.media ?? [];
     let mediaChanged = false;
     let newMedia: ProductMediaData[] | undefined;
     let removedFileIds: string[] = [];
+    let assetsToReserve: Array<Pick<VerifiedMediaAsset, 'fileId'>> = [];
 
     if (dto.media !== undefined && !dto.image) {
       this.validateMediaSet(dto.media);
@@ -178,6 +217,9 @@ export class ProductsService {
         !this.sameMediaSet(oldMedia, newMedia) ||
         Boolean(existing.imageUrl && oldMedia.length === 0);
       if (mediaChanged) {
+        assetsToReserve = newMedia.filter(
+          (item) => !oldMedia.some((old) => old.fileId === item.fileId),
+        );
         const retained = new Set(newMedia.map((item) => item.fileId));
         removedFileIds = oldMedia
           .filter((item) => !retained.has(item.fileId))
@@ -199,6 +241,7 @@ export class ProductsService {
         verified.fileId !== existing.imageFileId ||
         verified.url !== existing.imageUrl;
       mediaChanged = legacyChanged || oldMedia.length > 0;
+      if (legacyChanged) assetsToReserve = [verified];
       data.imageUrl = verified.url;
       data.imageFileId = verified.fileId;
       if (oldMedia.length) {
@@ -212,10 +255,33 @@ export class ProductsService {
     if (!Object.keys(data).length && !mediaChanged)
       return this.toAdminResponse(existing);
     try {
-      let product =
+      const persist = (transaction?: Prisma.TransactionClient) =>
         newMedia !== undefined && mediaChanged
-          ? await this.productsRepository.replaceMedia(id, data, newMedia)
-          : await this.productsRepository.update(id, data);
+          ? transaction
+            ? this.productsRepository.replaceMediaInTransaction(
+                transaction,
+                id,
+                data,
+                newMedia,
+                existing.version,
+              )
+            : this.productsRepository.replaceMedia(
+                id,
+                data,
+                newMedia,
+                existing.version,
+              )
+          : transaction
+            ? this.productsRepository.updateInTransaction(
+                transaction,
+                id,
+                data,
+                existing.version,
+              )
+            : this.productsRepository.update(id, data, existing.version);
+      let product = assetsToReserve.length
+        ? await this.getMediaService().withReservedAssets(assetsToReserve, persist)
+        : await persist();
 
       if (actorUserId) {
         const oldKeys = oldMedia.map(
@@ -249,7 +315,7 @@ export class ProductsService {
         await this.auditService?.log({
           actorUserId,
           action: Object.keys(data).every((key) =>
-            ['isActive', 'isAvailable'].includes(key),
+            ['availabilityStatus', 'cargoPrice'].includes(key),
           )
             ? AuditAction.PRODUCT_STATUS_CHANGE
             : AuditAction.PRODUCT_UPDATE,
@@ -274,7 +340,10 @@ export class ProductsService {
       return this.toAdminResponse(product);
     } catch (error) {
       if (this.isPrismaError(error, 'P2003')) throw categoryNotFound();
-      if (this.isPrismaError(error, 'P2025')) throw productNotFound();
+      if (this.isPrismaError(error, 'P2025')) throw new ConflictException({
+        error: 'PRODUCT_CHANGED',
+        message: 'Mahsulot boshqa so‘rov tomonidan o‘zgartirilgan; qayta yuklab ko‘ring',
+      });
       throw error;
     }
   }
@@ -312,41 +381,21 @@ export class ProductsService {
     const product = await this.productsRepository.findById(id);
     if (!product) throw productNotFound();
     try {
-      if ((await this.productsRepository.countOrderItems(id)) > 0) {
-        let inactiveProduct = product;
-        if (product.isActive || product.isAvailable) {
-          inactiveProduct = await this.productsRepository.update(id, {
-            isActive: false,
-            isAvailable: false,
-          });
-        }
+      const removal = await this.productsRepository.removeOrDeactivate(id, product.version);
+      if (!removal) throw productNotFound();
+      if (removal.softDeleted) {
         if (this.telegramPublisher) {
           await this.telegramPublisher.removeProductPostsBestEffort(
-            inactiveProduct,
+            removal.product,
           );
         }
         if (actorUserId) await this.logDelete(actorUserId, id, true);
         return;
       }
 
-      const fileIds = new Set((product.media ?? []).map((item) => item.fileId));
-      if (product.imageFileId) fileIds.add(product.imageFileId);
-      await this.productsRepository.delete(id);
-      if (this.telegramPublisher) {
-        const publisher = this
-          .telegramPublisher as ProductTelegramPublisherService & {
-          deleteProductPostsBestEffort?: (
-            value: ProductRecord,
-          ) => Promise<void>;
-        };
-        if (publisher.deleteProductPostsBestEffort) {
-          await publisher.deleteProductPostsBestEffort(product);
-        } else {
-          await this.telegramPublisher.deletePostBestEffort(
-            product.telegramChannelMessageId,
-          );
-        }
-      }
+      const fileIds = new Set((removal.product.media ?? []).map((item) => item.fileId));
+      if (removal.product.imageFileId) fileIds.add(removal.product.imageFileId);
+      if (this.telegramPublisher) await this.telegramPublisher.deleteProductPostsBestEffort(removal.product);
       for (const fileId of fileIds) await this.cleanupMedia(fileId);
       if (actorUserId) await this.logDelete(actorUserId, id, false);
     } catch (error) {
@@ -515,6 +564,9 @@ export class ProductsService {
         type: item.type,
         url: item.url,
         position: item.position,
+        width: item.width,
+        height: item.height,
+        ...(item.type === ProductMediaType.IMAGE ? { variants: imageVariants(item.url) } : {}),
       }));
     }
     return product.imageUrl
@@ -524,9 +576,26 @@ export class ProductsService {
             type: ProductMediaType.IMAGE,
             url: product.imageUrl,
             position: 0,
+            variants: imageVariants(product.imageUrl),
           },
         ]
       : [];
+  }
+
+  private toCardResponse(product: PublicProductCard) {
+    const variants = imageVariants(product.media?.[0]?.url ?? product.imageUrl);
+    return {
+      id: product.id,
+      name: product.name,
+      price: product.price.toFixed(2),
+      ...(product.availabilityStatus === ProductAvailabilityStatus.ARRIVING_IN_14_DAYS
+        ? { cargoPrice: product.cargoPrice?.toFixed(2) ?? null } : {}),
+      imageUrl: variants?.card ?? null,
+      imageVariants: variants,
+      categoryId: product.categoryId,
+      category: product.category,
+      availabilityStatus: product.availabilityStatus,
+    };
   }
 
   private toPublicResponse(product: PublicProductRecord | ProductRecord) {
@@ -535,12 +604,16 @@ export class ProductsService {
       name: product.name,
       description: product.description,
       price: product.price.toFixed(2),
+      ...(product.availabilityStatus ===
+      ProductAvailabilityStatus.ARRIVING_IN_14_DAYS
+        ? { cargoPrice: product.cargoPrice?.toFixed(2) ?? null }
+        : {}),
       imageUrl: product.imageUrl,
+      imageVariants: imageVariants(product.media?.find((item) => item.type === ProductMediaType.IMAGE)?.url ?? product.imageUrl),
       media: this.publicMedia(product),
       categoryId: product.categoryId,
       category: product.category,
-      isAvailable: product.isAvailable,
-      isActive: product.isActive,
+      availabilityStatus: product.availabilityStatus,
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
     };
@@ -642,6 +715,25 @@ export class ProductsService {
   private optionalText(value: string | null | undefined): string | null {
     if (value === null || value === undefined) return null;
     return value.trim() || null;
+  }
+
+  private assertCargoPrice(
+    status: ProductAvailabilityStatus,
+    cargoPrice: number | { toString(): string } | null | undefined,
+  ): void {
+    if (status === ProductAvailabilityStatus.ARRIVING_IN_14_DAYS) {
+      if (cargoPrice === null || cargoPrice === undefined) {
+        throw new BadRequestException({
+          error: 'CARGO_PRICE_REQUIRED',
+          message: '14 kunda keladigan mahsulot uchun kargo narxi majburiy',
+        });
+      }
+    } else if (cargoPrice !== undefined && cargoPrice !== null) {
+      throw new BadRequestException({
+        error: 'CARGO_PRICE_NOT_ALLOWED',
+        message: 'Kargo narxi faqat 14 kunda keladigan mahsulot uchun',
+      });
+    }
   }
 
   private paginate<T>(data: T[], total: number, query: QueryProductsDto) {

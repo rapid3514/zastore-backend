@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -52,7 +53,7 @@ export class AdminsService {
     if (!Object.keys(data).length) {
       throw new BadRequestException('At least one editable field is required');
     }
-    const updated = await this.adminsRepository.updateProfile(target.id, data);
+    const updated = await this.guardConcurrentChange(this.adminsRepository.updateProfile(target.id, data));
     await this.auditService?.log({
       actorUserId,
       action: AuditAction.ADMIN_UPDATE,
@@ -78,10 +79,12 @@ export class AdminsService {
     if (target.role !== UserRole.CUSTOMER) {
       throw new BadRequestException('Only customers can be promoted');
     }
-    const updated = await this.adminsRepository.setRole(
+    const updated = await this.guardConcurrentChange(this.adminsRepository.setRole(
       target.id,
       UserRole.ADMIN,
-    );
+      target.role,
+      target.isBlocked,
+    ));
     await this.auditService?.log({
       actorUserId,
       action: AuditAction.ADMIN_PROMOTE,
@@ -104,10 +107,12 @@ export class AdminsService {
     if (target.role !== UserRole.ADMIN) {
       throw new BadRequestException('Target user is not an admin');
     }
-    const updated = await this.adminsRepository.setRole(
+    const updated = await this.guardConcurrentChange(this.adminsRepository.setRole(
       target.id,
       UserRole.CUSTOMER,
-    );
+      target.role,
+      target.isBlocked,
+    ));
     await this.auditService?.log({
       actorUserId,
       action: AuditAction.ADMIN_DEMOTE,
@@ -143,10 +148,11 @@ export class AdminsService {
       throw new BadRequestException('Target user is not an admin');
     }
     if (target.isBlocked === isBlocked) return this.present(target);
-    const updated = await this.adminsRepository.setBlocked(
+    const updated = await this.guardConcurrentChange(this.adminsRepository.setBlocked(
       target.id,
       isBlocked,
-    );
+      target.isBlocked,
+    ));
     await this.auditService?.log({
       actorUserId,
       action: isBlocked ? AuditAction.ADMIN_BLOCK : AuditAction.ADMIN_UNBLOCK,
@@ -202,5 +208,16 @@ export class AdminsService {
       role: user.role,
       isBlocked: user.isBlocked,
     };
+  }
+
+  private async guardConcurrentChange<T>(operation: Promise<T>): Promise<T> {
+    try {
+      return await operation;
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2025') {
+        throw new ConflictException('Admin holati o‘zgargan; qayta yuklab ko‘ring');
+      }
+      throw error;
+    }
   }
 }

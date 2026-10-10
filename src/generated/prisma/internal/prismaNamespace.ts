@@ -400,9 +400,11 @@ export const ModelName = {
   User: 'User',
   Category: 'Category',
   Product: 'Product',
+  MediaAsset: 'MediaAsset',
   ProductMedia: 'ProductMedia',
   ProductTelegramMessage: 'ProductTelegramMessage',
   Order: 'Order',
+  NotificationOutbox: 'NotificationOutbox',
   Payment: 'Payment',
   AuditLog: 'AuditLog',
   OrderItem: 'OrderItem',
@@ -423,7 +425,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "category" | "product" | "productMedia" | "productTelegramMessage" | "order" | "payment" | "auditLog" | "orderItem" | "workHour" | "refreshSession"
+    modelProps: "user" | "category" | "product" | "mediaAsset" | "productMedia" | "productTelegramMessage" | "order" | "notificationOutbox" | "payment" | "auditLog" | "orderItem" | "workHour" | "refreshSession"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -649,6 +651,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    MediaAsset: {
+      payload: Prisma.$MediaAssetPayload<ExtArgs>
+      fields: Prisma.MediaAssetFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.MediaAssetFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.MediaAssetFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload>
+        }
+        findFirst: {
+          args: Prisma.MediaAssetFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.MediaAssetFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload>
+        }
+        findMany: {
+          args: Prisma.MediaAssetFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload>[]
+        }
+        create: {
+          args: Prisma.MediaAssetCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload>
+        }
+        createMany: {
+          args: Prisma.MediaAssetCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.MediaAssetCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload>[]
+        }
+        delete: {
+          args: Prisma.MediaAssetDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload>
+        }
+        update: {
+          args: Prisma.MediaAssetUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload>
+        }
+        deleteMany: {
+          args: Prisma.MediaAssetDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.MediaAssetUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.MediaAssetUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload>[]
+        }
+        upsert: {
+          args: Prisma.MediaAssetUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MediaAssetPayload>
+        }
+        aggregate: {
+          args: Prisma.MediaAssetAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateMediaAsset>
+        }
+        groupBy: {
+          args: Prisma.MediaAssetGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MediaAssetGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.MediaAssetCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MediaAssetCountAggregateOutputType> | number
+        }
+      }
+    }
     ProductMedia: {
       payload: Prisma.$ProductMediaPayload<ExtArgs>
       fields: Prisma.ProductMediaFieldRefs
@@ -868,6 +944,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.OrderCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.OrderCountAggregateOutputType> | number
+        }
+      }
+    }
+    NotificationOutbox: {
+      payload: Prisma.$NotificationOutboxPayload<ExtArgs>
+      fields: Prisma.NotificationOutboxFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.NotificationOutboxFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.NotificationOutboxFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload>
+        }
+        findFirst: {
+          args: Prisma.NotificationOutboxFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.NotificationOutboxFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload>
+        }
+        findMany: {
+          args: Prisma.NotificationOutboxFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload>[]
+        }
+        create: {
+          args: Prisma.NotificationOutboxCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload>
+        }
+        createMany: {
+          args: Prisma.NotificationOutboxCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.NotificationOutboxCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload>[]
+        }
+        delete: {
+          args: Prisma.NotificationOutboxDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload>
+        }
+        update: {
+          args: Prisma.NotificationOutboxUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload>
+        }
+        deleteMany: {
+          args: Prisma.NotificationOutboxDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.NotificationOutboxUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.NotificationOutboxUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload>[]
+        }
+        upsert: {
+          args: Prisma.NotificationOutboxUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationOutboxPayload>
+        }
+        aggregate: {
+          args: Prisma.NotificationOutboxAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateNotificationOutbox>
+        }
+        groupBy: {
+          args: Prisma.NotificationOutboxGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.NotificationOutboxGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.NotificationOutboxCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.NotificationOutboxCountAggregateOutputType> | number
         }
       }
     }
@@ -1319,11 +1469,12 @@ export const ProductScalarFieldEnum = {
   name: 'name',
   description: 'description',
   price: 'price',
+  cargoPrice: 'cargoPrice',
   imageUrl: 'imageUrl',
   imageFileId: 'imageFileId',
   categoryId: 'categoryId',
-  isAvailable: 'isAvailable',
-  isActive: 'isActive',
+  availabilityStatus: 'availabilityStatus',
+  version: 'version',
   telegramChannelMessageId: 'telegramChannelMessageId',
   telegramButtonMessageId: 'telegramButtonMessageId',
   telegramPublishedAt: 'telegramPublishedAt',
@@ -1334,6 +1485,19 @@ export const ProductScalarFieldEnum = {
 } as const
 
 export type ProductScalarFieldEnum = (typeof ProductScalarFieldEnum)[keyof typeof ProductScalarFieldEnum]
+
+
+export const MediaAssetScalarFieldEnum = {
+  fileId: 'fileId',
+  status: 'status',
+  deleteRequestedAt: 'deleteRequestedAt',
+  deleteLeaseExpiresAt: 'deleteLeaseExpiresAt',
+  deletedAt: 'deletedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type MediaAssetScalarFieldEnum = (typeof MediaAssetScalarFieldEnum)[keyof typeof MediaAssetScalarFieldEnum]
 
 
 export const ProductMediaScalarFieldEnum = {
@@ -1367,6 +1531,8 @@ export type ProductTelegramMessageScalarFieldEnum = (typeof ProductTelegramMessa
 export const OrderScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
+  idempotencyKey: 'idempotencyKey',
+  requestHash: 'requestHash',
   status: 'status',
   phone: 'phone',
   deliveryAddress: 'deliveryAddress',
@@ -1387,6 +1553,28 @@ export const OrderScalarFieldEnum = {
 } as const
 
 export type OrderScalarFieldEnum = (typeof OrderScalarFieldEnum)[keyof typeof OrderScalarFieldEnum]
+
+
+export const NotificationOutboxScalarFieldEnum = {
+  id: 'id',
+  sequence: 'sequence',
+  eventKey: 'eventKey',
+  orderId: 'orderId',
+  recipient: 'recipient',
+  kind: 'kind',
+  orderStatus: 'orderStatus',
+  status: 'status',
+  attempts: 'attempts',
+  availableAt: 'availableAt',
+  claimedAt: 'claimedAt',
+  claimToken: 'claimToken',
+  deliveredAt: 'deliveredAt',
+  lastErrorCode: 'lastErrorCode',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type NotificationOutboxScalarFieldEnum = (typeof NotificationOutboxScalarFieldEnum)[keyof typeof NotificationOutboxScalarFieldEnum]
 
 
 export const PaymentScalarFieldEnum = {
@@ -1446,6 +1634,8 @@ export type WorkHourScalarFieldEnum = (typeof WorkHourScalarFieldEnum)[keyof typ
 
 export const RefreshSessionScalarFieldEnum = {
   id: 'id',
+  familyId: 'familyId',
+  parentId: 'parentId',
   tokenHash: 'tokenHash',
   userId: 'userId',
   expiresAt: 'expiresAt',
@@ -1596,6 +1786,20 @@ export type ListDecimalFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaMo
 
 
 /**
+ * Reference to a field of type 'ProductAvailabilityStatus'
+ */
+export type EnumProductAvailabilityStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ProductAvailabilityStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'ProductAvailabilityStatus[]'
+ */
+export type ListEnumProductAvailabilityStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ProductAvailabilityStatus[]'>
+    
+
+
+/**
  * Reference to a field of type 'TelegramProductSyncStatus'
  */
 export type EnumTelegramProductSyncStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'TelegramProductSyncStatus'>
@@ -1606,6 +1810,20 @@ export type EnumTelegramProductSyncStatusFieldRefInput<$PrismaModel> = FieldRefI
  * Reference to a field of type 'TelegramProductSyncStatus[]'
  */
 export type ListEnumTelegramProductSyncStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'TelegramProductSyncStatus[]'>
+    
+
+
+/**
+ * Reference to a field of type 'MediaAssetStatus'
+ */
+export type EnumMediaAssetStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'MediaAssetStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'MediaAssetStatus[]'
+ */
+export type ListEnumMediaAssetStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'MediaAssetStatus[]'>
     
 
 
@@ -1634,6 +1852,34 @@ export type EnumOrderStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$Pris
  * Reference to a field of type 'OrderStatus[]'
  */
 export type ListEnumOrderStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'OrderStatus[]'>
+    
+
+
+/**
+ * Reference to a field of type 'NotificationKind'
+ */
+export type EnumNotificationKindFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'NotificationKind'>
+    
+
+
+/**
+ * Reference to a field of type 'NotificationKind[]'
+ */
+export type ListEnumNotificationKindFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'NotificationKind[]'>
+    
+
+
+/**
+ * Reference to a field of type 'NotificationDeliveryStatus'
+ */
+export type EnumNotificationDeliveryStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'NotificationDeliveryStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'NotificationDeliveryStatus[]'
+ */
+export type ListEnumNotificationDeliveryStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'NotificationDeliveryStatus[]'>
     
 
 
@@ -1874,9 +2120,11 @@ export type GlobalOmitConfig = {
   user?: Prisma.UserOmit
   category?: Prisma.CategoryOmit
   product?: Prisma.ProductOmit
+  mediaAsset?: Prisma.MediaAssetOmit
   productMedia?: Prisma.ProductMediaOmit
   productTelegramMessage?: Prisma.ProductTelegramMessageOmit
   order?: Prisma.OrderOmit
+  notificationOutbox?: Prisma.NotificationOutboxOmit
   payment?: Prisma.PaymentOmit
   auditLog?: Prisma.AuditLogOmit
   orderItem?: Prisma.OrderItemOmit

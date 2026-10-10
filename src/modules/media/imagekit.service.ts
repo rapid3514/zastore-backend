@@ -9,6 +9,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { getConfiguration } from '../../config/configuration.js';
 
 const imageNotFound = () =>
   new NotFoundException({
@@ -22,7 +23,7 @@ export class ImageKitService {
   private readonly client?: ImageKit;
 
   constructor(private readonly configService: ConfigService) {
-    const privateKey = this.configService.get<string>('IMAGEKIT_PRIVATE_KEY');
+    const privateKey = getConfiguration(this.configService).media.privateKey;
     if (privateKey) {
       this.client = new ImageKit({
         privateKey,

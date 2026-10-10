@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsUUID, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsUUID, Max, Min } from 'class-validator';
+import { MAX_ORDER_QUANTITY } from '../constants/order-limits.js';
 
 export class CreateOrderItemDto {
   @IsUUID()
@@ -9,5 +10,6 @@ export class CreateOrderItemDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(MAX_ORDER_QUANTITY)
   quantity!: number;
 }

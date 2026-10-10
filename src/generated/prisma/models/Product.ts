@@ -28,12 +28,16 @@ export type AggregateProduct = {
 
 export type ProductAvgAggregateOutputType = {
   price: runtime.Decimal | null
+  cargoPrice: runtime.Decimal | null
+  version: number | null
   telegramChannelMessageId: number | null
   telegramButtonMessageId: number | null
 }
 
 export type ProductSumAggregateOutputType = {
   price: runtime.Decimal | null
+  cargoPrice: runtime.Decimal | null
+  version: number | null
   telegramChannelMessageId: number | null
   telegramButtonMessageId: number | null
 }
@@ -43,11 +47,12 @@ export type ProductMinAggregateOutputType = {
   name: string | null
   description: string | null
   price: runtime.Decimal | null
+  cargoPrice: runtime.Decimal | null
   imageUrl: string | null
   imageFileId: string | null
   categoryId: string | null
-  isAvailable: boolean | null
-  isActive: boolean | null
+  availabilityStatus: $Enums.ProductAvailabilityStatus | null
+  version: number | null
   telegramChannelMessageId: number | null
   telegramButtonMessageId: number | null
   telegramPublishedAt: Date | null
@@ -62,11 +67,12 @@ export type ProductMaxAggregateOutputType = {
   name: string | null
   description: string | null
   price: runtime.Decimal | null
+  cargoPrice: runtime.Decimal | null
   imageUrl: string | null
   imageFileId: string | null
   categoryId: string | null
-  isAvailable: boolean | null
-  isActive: boolean | null
+  availabilityStatus: $Enums.ProductAvailabilityStatus | null
+  version: number | null
   telegramChannelMessageId: number | null
   telegramButtonMessageId: number | null
   telegramPublishedAt: Date | null
@@ -81,11 +87,12 @@ export type ProductCountAggregateOutputType = {
   name: number
   description: number
   price: number
+  cargoPrice: number
   imageUrl: number
   imageFileId: number
   categoryId: number
-  isAvailable: number
-  isActive: number
+  availabilityStatus: number
+  version: number
   telegramChannelMessageId: number
   telegramButtonMessageId: number
   telegramPublishedAt: number
@@ -99,12 +106,16 @@ export type ProductCountAggregateOutputType = {
 
 export type ProductAvgAggregateInputType = {
   price?: true
+  cargoPrice?: true
+  version?: true
   telegramChannelMessageId?: true
   telegramButtonMessageId?: true
 }
 
 export type ProductSumAggregateInputType = {
   price?: true
+  cargoPrice?: true
+  version?: true
   telegramChannelMessageId?: true
   telegramButtonMessageId?: true
 }
@@ -114,11 +125,12 @@ export type ProductMinAggregateInputType = {
   name?: true
   description?: true
   price?: true
+  cargoPrice?: true
   imageUrl?: true
   imageFileId?: true
   categoryId?: true
-  isAvailable?: true
-  isActive?: true
+  availabilityStatus?: true
+  version?: true
   telegramChannelMessageId?: true
   telegramButtonMessageId?: true
   telegramPublishedAt?: true
@@ -133,11 +145,12 @@ export type ProductMaxAggregateInputType = {
   name?: true
   description?: true
   price?: true
+  cargoPrice?: true
   imageUrl?: true
   imageFileId?: true
   categoryId?: true
-  isAvailable?: true
-  isActive?: true
+  availabilityStatus?: true
+  version?: true
   telegramChannelMessageId?: true
   telegramButtonMessageId?: true
   telegramPublishedAt?: true
@@ -152,11 +165,12 @@ export type ProductCountAggregateInputType = {
   name?: true
   description?: true
   price?: true
+  cargoPrice?: true
   imageUrl?: true
   imageFileId?: true
   categoryId?: true
-  isAvailable?: true
-  isActive?: true
+  availabilityStatus?: true
+  version?: true
   telegramChannelMessageId?: true
   telegramButtonMessageId?: true
   telegramPublishedAt?: true
@@ -258,11 +272,12 @@ export type ProductGroupByOutputType = {
   name: string
   description: string | null
   price: runtime.Decimal
+  cargoPrice: runtime.Decimal | null
   imageUrl: string | null
   imageFileId: string | null
   categoryId: string
-  isAvailable: boolean
-  isActive: boolean
+  availabilityStatus: $Enums.ProductAvailabilityStatus
+  version: number
   telegramChannelMessageId: number | null
   telegramButtonMessageId: number | null
   telegramPublishedAt: Date | null
@@ -300,11 +315,12 @@ export type ProductWhereInput = {
   name?: Prisma.StringFilter<"Product"> | string
   description?: Prisma.StringNullableFilter<"Product"> | string | null
   price?: Prisma.DecimalFilter<"Product"> | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.DecimalNullableFilter<"Product"> | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.StringNullableFilter<"Product"> | string | null
   imageFileId?: Prisma.StringNullableFilter<"Product"> | string | null
   categoryId?: Prisma.UuidFilter<"Product"> | string
-  isAvailable?: Prisma.BoolFilter<"Product"> | boolean
-  isActive?: Prisma.BoolFilter<"Product"> | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFilter<"Product"> | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFilter<"Product"> | number
   telegramChannelMessageId?: Prisma.IntNullableFilter<"Product"> | number | null
   telegramButtonMessageId?: Prisma.IntNullableFilter<"Product"> | number | null
   telegramPublishedAt?: Prisma.DateTimeNullableFilter<"Product"> | Date | string | null
@@ -323,11 +339,12 @@ export type ProductOrderByWithRelationInput = {
   name?: Prisma.SortOrder
   description?: Prisma.SortOrderInput | Prisma.SortOrder
   price?: Prisma.SortOrder
+  cargoPrice?: Prisma.SortOrderInput | Prisma.SortOrder
   imageUrl?: Prisma.SortOrderInput | Prisma.SortOrder
   imageFileId?: Prisma.SortOrderInput | Prisma.SortOrder
   categoryId?: Prisma.SortOrder
-  isAvailable?: Prisma.SortOrder
-  isActive?: Prisma.SortOrder
+  availabilityStatus?: Prisma.SortOrder
+  version?: Prisma.SortOrder
   telegramChannelMessageId?: Prisma.SortOrderInput | Prisma.SortOrder
   telegramButtonMessageId?: Prisma.SortOrderInput | Prisma.SortOrder
   telegramPublishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -349,11 +366,12 @@ export type ProductWhereUniqueInput = Prisma.AtLeast<{
   name?: Prisma.StringFilter<"Product"> | string
   description?: Prisma.StringNullableFilter<"Product"> | string | null
   price?: Prisma.DecimalFilter<"Product"> | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.DecimalNullableFilter<"Product"> | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.StringNullableFilter<"Product"> | string | null
   imageFileId?: Prisma.StringNullableFilter<"Product"> | string | null
   categoryId?: Prisma.UuidFilter<"Product"> | string
-  isAvailable?: Prisma.BoolFilter<"Product"> | boolean
-  isActive?: Prisma.BoolFilter<"Product"> | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFilter<"Product"> | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFilter<"Product"> | number
   telegramChannelMessageId?: Prisma.IntNullableFilter<"Product"> | number | null
   telegramButtonMessageId?: Prisma.IntNullableFilter<"Product"> | number | null
   telegramPublishedAt?: Prisma.DateTimeNullableFilter<"Product"> | Date | string | null
@@ -372,11 +390,12 @@ export type ProductOrderByWithAggregationInput = {
   name?: Prisma.SortOrder
   description?: Prisma.SortOrderInput | Prisma.SortOrder
   price?: Prisma.SortOrder
+  cargoPrice?: Prisma.SortOrderInput | Prisma.SortOrder
   imageUrl?: Prisma.SortOrderInput | Prisma.SortOrder
   imageFileId?: Prisma.SortOrderInput | Prisma.SortOrder
   categoryId?: Prisma.SortOrder
-  isAvailable?: Prisma.SortOrder
-  isActive?: Prisma.SortOrder
+  availabilityStatus?: Prisma.SortOrder
+  version?: Prisma.SortOrder
   telegramChannelMessageId?: Prisma.SortOrderInput | Prisma.SortOrder
   telegramButtonMessageId?: Prisma.SortOrderInput | Prisma.SortOrder
   telegramPublishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -399,11 +418,12 @@ export type ProductScalarWhereWithAggregatesInput = {
   name?: Prisma.StringWithAggregatesFilter<"Product"> | string
   description?: Prisma.StringNullableWithAggregatesFilter<"Product"> | string | null
   price?: Prisma.DecimalWithAggregatesFilter<"Product"> | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.DecimalNullableWithAggregatesFilter<"Product"> | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.StringNullableWithAggregatesFilter<"Product"> | string | null
   imageFileId?: Prisma.StringNullableWithAggregatesFilter<"Product"> | string | null
   categoryId?: Prisma.UuidWithAggregatesFilter<"Product"> | string
-  isAvailable?: Prisma.BoolWithAggregatesFilter<"Product"> | boolean
-  isActive?: Prisma.BoolWithAggregatesFilter<"Product"> | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusWithAggregatesFilter<"Product"> | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntWithAggregatesFilter<"Product"> | number
   telegramChannelMessageId?: Prisma.IntNullableWithAggregatesFilter<"Product"> | number | null
   telegramButtonMessageId?: Prisma.IntNullableWithAggregatesFilter<"Product"> | number | null
   telegramPublishedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Product"> | Date | string | null
@@ -418,10 +438,11 @@ export type ProductCreateInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -440,11 +461,12 @@ export type ProductUncheckedCreateInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
   categoryId: string
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -462,10 +484,11 @@ export type ProductUpdateInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -484,11 +507,12 @@ export type ProductUncheckedUpdateInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   categoryId?: Prisma.StringFieldUpdateOperationsInput | string
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -506,11 +530,12 @@ export type ProductCreateManyInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
   categoryId: string
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -525,10 +550,11 @@ export type ProductUpdateManyMutationInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -543,11 +569,12 @@ export type ProductUncheckedUpdateManyInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   categoryId?: Prisma.StringFieldUpdateOperationsInput | string
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -572,11 +599,12 @@ export type ProductCountOrderByAggregateInput = {
   name?: Prisma.SortOrder
   description?: Prisma.SortOrder
   price?: Prisma.SortOrder
+  cargoPrice?: Prisma.SortOrder
   imageUrl?: Prisma.SortOrder
   imageFileId?: Prisma.SortOrder
   categoryId?: Prisma.SortOrder
-  isAvailable?: Prisma.SortOrder
-  isActive?: Prisma.SortOrder
+  availabilityStatus?: Prisma.SortOrder
+  version?: Prisma.SortOrder
   telegramChannelMessageId?: Prisma.SortOrder
   telegramButtonMessageId?: Prisma.SortOrder
   telegramPublishedAt?: Prisma.SortOrder
@@ -588,6 +616,8 @@ export type ProductCountOrderByAggregateInput = {
 
 export type ProductAvgOrderByAggregateInput = {
   price?: Prisma.SortOrder
+  cargoPrice?: Prisma.SortOrder
+  version?: Prisma.SortOrder
   telegramChannelMessageId?: Prisma.SortOrder
   telegramButtonMessageId?: Prisma.SortOrder
 }
@@ -597,11 +627,12 @@ export type ProductMaxOrderByAggregateInput = {
   name?: Prisma.SortOrder
   description?: Prisma.SortOrder
   price?: Prisma.SortOrder
+  cargoPrice?: Prisma.SortOrder
   imageUrl?: Prisma.SortOrder
   imageFileId?: Prisma.SortOrder
   categoryId?: Prisma.SortOrder
-  isAvailable?: Prisma.SortOrder
-  isActive?: Prisma.SortOrder
+  availabilityStatus?: Prisma.SortOrder
+  version?: Prisma.SortOrder
   telegramChannelMessageId?: Prisma.SortOrder
   telegramButtonMessageId?: Prisma.SortOrder
   telegramPublishedAt?: Prisma.SortOrder
@@ -616,11 +647,12 @@ export type ProductMinOrderByAggregateInput = {
   name?: Prisma.SortOrder
   description?: Prisma.SortOrder
   price?: Prisma.SortOrder
+  cargoPrice?: Prisma.SortOrder
   imageUrl?: Prisma.SortOrder
   imageFileId?: Prisma.SortOrder
   categoryId?: Prisma.SortOrder
-  isAvailable?: Prisma.SortOrder
-  isActive?: Prisma.SortOrder
+  availabilityStatus?: Prisma.SortOrder
+  version?: Prisma.SortOrder
   telegramChannelMessageId?: Prisma.SortOrder
   telegramButtonMessageId?: Prisma.SortOrder
   telegramPublishedAt?: Prisma.SortOrder
@@ -632,6 +664,8 @@ export type ProductMinOrderByAggregateInput = {
 
 export type ProductSumOrderByAggregateInput = {
   price?: Prisma.SortOrder
+  cargoPrice?: Prisma.SortOrder
+  version?: Prisma.SortOrder
   telegramChannelMessageId?: Prisma.SortOrder
   telegramButtonMessageId?: Prisma.SortOrder
 }
@@ -696,6 +730,18 @@ export type DecimalFieldUpdateOperationsInput = {
   divide?: runtime.Decimal | runtime.DecimalJsLike | number | string
 }
 
+export type NullableDecimalFieldUpdateOperationsInput = {
+  set?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
+  increment?: runtime.Decimal | runtime.DecimalJsLike | number | string
+  decrement?: runtime.Decimal | runtime.DecimalJsLike | number | string
+  multiply?: runtime.Decimal | runtime.DecimalJsLike | number | string
+  divide?: runtime.Decimal | runtime.DecimalJsLike | number | string
+}
+
+export type EnumProductAvailabilityStatusFieldUpdateOperationsInput = {
+  set?: $Enums.ProductAvailabilityStatus
+}
+
 export type NullableIntFieldUpdateOperationsInput = {
   set?: number | null
   increment?: number
@@ -757,10 +803,11 @@ export type ProductCreateWithoutCategoryInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -778,10 +825,11 @@ export type ProductUncheckedCreateWithoutCategoryInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -828,11 +876,12 @@ export type ProductScalarWhereInput = {
   name?: Prisma.StringFilter<"Product"> | string
   description?: Prisma.StringNullableFilter<"Product"> | string | null
   price?: Prisma.DecimalFilter<"Product"> | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.DecimalNullableFilter<"Product"> | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.StringNullableFilter<"Product"> | string | null
   imageFileId?: Prisma.StringNullableFilter<"Product"> | string | null
   categoryId?: Prisma.UuidFilter<"Product"> | string
-  isAvailable?: Prisma.BoolFilter<"Product"> | boolean
-  isActive?: Prisma.BoolFilter<"Product"> | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFilter<"Product"> | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFilter<"Product"> | number
   telegramChannelMessageId?: Prisma.IntNullableFilter<"Product"> | number | null
   telegramButtonMessageId?: Prisma.IntNullableFilter<"Product"> | number | null
   telegramPublishedAt?: Prisma.DateTimeNullableFilter<"Product"> | Date | string | null
@@ -847,10 +896,11 @@ export type ProductCreateWithoutMediaInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -868,11 +918,12 @@ export type ProductUncheckedCreateWithoutMediaInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
   categoryId: string
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -905,10 +956,11 @@ export type ProductUpdateWithoutMediaInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -926,11 +978,12 @@ export type ProductUncheckedUpdateWithoutMediaInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   categoryId?: Prisma.StringFieldUpdateOperationsInput | string
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -947,10 +1000,11 @@ export type ProductCreateWithoutTelegramMessagesInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -968,11 +1022,12 @@ export type ProductUncheckedCreateWithoutTelegramMessagesInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
   categoryId: string
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -1005,10 +1060,11 @@ export type ProductUpdateWithoutTelegramMessagesInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1026,11 +1082,12 @@ export type ProductUncheckedUpdateWithoutTelegramMessagesInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   categoryId?: Prisma.StringFieldUpdateOperationsInput | string
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1047,10 +1104,11 @@ export type ProductCreateWithoutOrderItemsInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -1068,11 +1126,12 @@ export type ProductUncheckedCreateWithoutOrderItemsInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
   categoryId: string
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -1105,10 +1164,11 @@ export type ProductUpdateWithoutOrderItemsInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1126,11 +1186,12 @@ export type ProductUncheckedUpdateWithoutOrderItemsInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   categoryId?: Prisma.StringFieldUpdateOperationsInput | string
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1147,10 +1208,11 @@ export type ProductCreateManyCategoryInput = {
   name: string
   description?: string | null
   price: runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: string | null
   imageFileId?: string | null
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: $Enums.ProductAvailabilityStatus
+  version?: number
   telegramChannelMessageId?: number | null
   telegramButtonMessageId?: number | null
   telegramPublishedAt?: Date | string | null
@@ -1165,10 +1227,11 @@ export type ProductUpdateWithoutCategoryInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1186,10 +1249,11 @@ export type ProductUncheckedUpdateWithoutCategoryInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1207,10 +1271,11 @@ export type ProductUncheckedUpdateManyWithoutCategoryInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string
+  cargoPrice?: Prisma.NullableDecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string | null
   imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   imageFileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAvailable?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  availabilityStatus?: Prisma.EnumProductAvailabilityStatusFieldUpdateOperationsInput | $Enums.ProductAvailabilityStatus
+  version?: Prisma.IntFieldUpdateOperationsInput | number
   telegramChannelMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramButtonMessageId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   telegramPublishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1274,11 +1339,12 @@ export type ProductSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   name?: boolean
   description?: boolean
   price?: boolean
+  cargoPrice?: boolean
   imageUrl?: boolean
   imageFileId?: boolean
   categoryId?: boolean
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: boolean
+  version?: boolean
   telegramChannelMessageId?: boolean
   telegramButtonMessageId?: boolean
   telegramPublishedAt?: boolean
@@ -1298,11 +1364,12 @@ export type ProductSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
   name?: boolean
   description?: boolean
   price?: boolean
+  cargoPrice?: boolean
   imageUrl?: boolean
   imageFileId?: boolean
   categoryId?: boolean
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: boolean
+  version?: boolean
   telegramChannelMessageId?: boolean
   telegramButtonMessageId?: boolean
   telegramPublishedAt?: boolean
@@ -1318,11 +1385,12 @@ export type ProductSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
   name?: boolean
   description?: boolean
   price?: boolean
+  cargoPrice?: boolean
   imageUrl?: boolean
   imageFileId?: boolean
   categoryId?: boolean
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: boolean
+  version?: boolean
   telegramChannelMessageId?: boolean
   telegramButtonMessageId?: boolean
   telegramPublishedAt?: boolean
@@ -1338,11 +1406,12 @@ export type ProductSelectScalar = {
   name?: boolean
   description?: boolean
   price?: boolean
+  cargoPrice?: boolean
   imageUrl?: boolean
   imageFileId?: boolean
   categoryId?: boolean
-  isAvailable?: boolean
-  isActive?: boolean
+  availabilityStatus?: boolean
+  version?: boolean
   telegramChannelMessageId?: boolean
   telegramButtonMessageId?: boolean
   telegramPublishedAt?: boolean
@@ -1352,7 +1421,7 @@ export type ProductSelectScalar = {
   updatedAt?: boolean
 }
 
-export type ProductOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "description" | "price" | "imageUrl" | "imageFileId" | "categoryId" | "isAvailable" | "isActive" | "telegramChannelMessageId" | "telegramButtonMessageId" | "telegramPublishedAt" | "telegramSyncedAt" | "telegramSyncStatus" | "createdAt" | "updatedAt", ExtArgs["result"]["product"]>
+export type ProductOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "description" | "price" | "cargoPrice" | "imageUrl" | "imageFileId" | "categoryId" | "availabilityStatus" | "version" | "telegramChannelMessageId" | "telegramButtonMessageId" | "telegramPublishedAt" | "telegramSyncedAt" | "telegramSyncStatus" | "createdAt" | "updatedAt", ExtArgs["result"]["product"]>
 export type ProductInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   category?: boolean | Prisma.CategoryDefaultArgs<ExtArgs>
   orderItems?: boolean | Prisma.Product$orderItemsArgs<ExtArgs>
@@ -1380,11 +1449,12 @@ export type $ProductPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     name: string
     description: string | null
     price: runtime.Decimal
+    cargoPrice: runtime.Decimal | null
     imageUrl: string | null
     imageFileId: string | null
     categoryId: string
-    isAvailable: boolean
-    isActive: boolean
+    availabilityStatus: $Enums.ProductAvailabilityStatus
+    version: number
     telegramChannelMessageId: number | null
     telegramButtonMessageId: number | null
     telegramPublishedAt: Date | null
@@ -1823,11 +1893,12 @@ export interface ProductFieldRefs {
   readonly name: Prisma.FieldRef<"Product", 'String'>
   readonly description: Prisma.FieldRef<"Product", 'String'>
   readonly price: Prisma.FieldRef<"Product", 'Decimal'>
+  readonly cargoPrice: Prisma.FieldRef<"Product", 'Decimal'>
   readonly imageUrl: Prisma.FieldRef<"Product", 'String'>
   readonly imageFileId: Prisma.FieldRef<"Product", 'String'>
   readonly categoryId: Prisma.FieldRef<"Product", 'String'>
-  readonly isAvailable: Prisma.FieldRef<"Product", 'Boolean'>
-  readonly isActive: Prisma.FieldRef<"Product", 'Boolean'>
+  readonly availabilityStatus: Prisma.FieldRef<"Product", 'ProductAvailabilityStatus'>
+  readonly version: Prisma.FieldRef<"Product", 'Int'>
   readonly telegramChannelMessageId: Prisma.FieldRef<"Product", 'Int'>
   readonly telegramButtonMessageId: Prisma.FieldRef<"Product", 'Int'>
   readonly telegramPublishedAt: Prisma.FieldRef<"Product", 'DateTime'>

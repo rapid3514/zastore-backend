@@ -36,7 +36,7 @@ export class WorkHoursRepository {
   }
 
   upsertMany(entries: WorkHourScheduleEntry[]) {
-    return Promise.all(
+    return this.prisma.$transaction(
       entries.map((entry) =>
         this.prisma.workHour.upsert({
           where: { dayOfWeek: entry.dayOfWeek },

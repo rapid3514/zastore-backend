@@ -3,7 +3,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '../../generated/prisma/client.js';
 import type { QueryPaymentsDto } from './dto/query-payments.dto.js';
 import { PaymentsRepository } from './payments.repository.js';
 
@@ -28,28 +27,12 @@ export class PaymentsService {
   constructor(private readonly paymentsRepository: PaymentsRepository) {}
 
   async createForOrder(userId: string, orderId: string) {
-    const order = await this.paymentsRepository.findOwnedOrder(orderId, userId);
-    if (!order) throw orderNotFound();
-
-    const existing = await this.paymentsRepository.findByOrderId(orderId);
-    if (existing) return this.present(existing);
-
-    try {
-      const payment = await this.paymentsRepository.create(
-        order.id,
-        new Prisma.Decimal(order.total.toString()),
-      );
-      return this.present(payment);
-    } catch (error) {
-      if (this.isPrismaError(error, 'P2002')) {
-        const payment = await this.paymentsRepository.findOwnedByOrderId(
-          orderId,
-          userId,
-        );
-        if (payment) return this.present(payment);
-      }
-      throw error;
-    }
+    const payment = await this.paymentsRepository.createForOwnedOrder(
+      orderId,
+      userId,
+    );
+    if (!payment) throw orderNotFound();
+    return this.present(payment);
   }
 
   async getForOrder(userId: string, orderId: string) {
@@ -114,14 +97,5 @@ export class PaymentsService {
           ? 'External payment provider not configured'
           : null,
     };
-  }
-
-  private isPrismaError(error: unknown, code: string): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: unknown }).code === code
-    );
   }
 }

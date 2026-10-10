@@ -17,18 +17,27 @@ export class AdminsRepository {
     });
   }
 
-  setRole(id: string, role: UserRole) {
-    return this.prisma.user.update({ where: { id }, data: { role } });
+  setRole(id: string, role: UserRole, expectedRole: UserRole, expectedBlocked: boolean) {
+    return this.prisma.user.update({
+      where: { id, role: expectedRole, isBlocked: expectedBlocked },
+      data: { role },
+    });
   }
 
-  setBlocked(id: string, isBlocked: boolean) {
-    return this.prisma.user.update({ where: { id }, data: { isBlocked } });
+  setBlocked(id: string, isBlocked: boolean, expectedBlocked: boolean) {
+    return this.prisma.user.update({
+      where: { id, role: UserRole.ADMIN, isBlocked: expectedBlocked },
+      data: { isBlocked },
+    });
   }
 
   updateProfile(
     id: string,
     data: { firstName?: string; lastName?: string; username?: string },
   ) {
-    return this.prisma.user.update({ where: { id }, data });
+    return this.prisma.user.update({
+      where: { id, role: UserRole.ADMIN, isBlocked: false },
+      data,
+    });
   }
 }

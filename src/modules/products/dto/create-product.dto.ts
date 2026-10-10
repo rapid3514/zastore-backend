@@ -1,6 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  IsBoolean,
+  IsEnum,
   ArrayMaxSize,
   IsNumber,
   IsOptional,
@@ -12,6 +12,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { ProductAvailabilityStatus } from '../../../generated/prisma/client.js';
 import { ProductImageDto } from '../../media/dto/product-image.dto.js';
 import { ProductMediaDto } from './product-media.dto.js';
 
@@ -41,6 +42,13 @@ export class CreateProductDto {
   price!: number;
 
   @IsOptional()
+  @Transform(numericPrice)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(99999999.99)
+  cargoPrice?: number;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => ProductImageDto)
   image?: ProductImageDto;
@@ -55,10 +63,7 @@ export class CreateProductDto {
   categoryId!: string;
 
   @IsOptional()
-  @IsBoolean()
-  isAvailable?: boolean;
+  @IsEnum(ProductAvailabilityStatus)
+  availabilityStatus?: ProductAvailabilityStatus;
 
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
 }

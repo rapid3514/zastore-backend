@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import {
   Prisma,
+  ProductAvailabilityStatus,
   ProductMediaType,
   TelegramProductSyncStatus,
 } from '../../generated/prisma/client.js';
@@ -55,8 +56,9 @@ function product(media: ReturnType<typeof storedMedia> = []) {
     imageFileId: cover?.fileId ?? null,
     categoryId,
     category: { id: categoryId, name: 'Category', slug: 'category' },
-    isAvailable: true,
+    availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
     isActive: true,
+    version: 0,
     media,
     telegramMessages: [],
     telegramChannelMessageId: null,
@@ -75,6 +77,7 @@ function harness(existingMedia: ProductMediaDto[] = []) {
       .fn()
       .mockResolvedValue({ id: categoryId, isActive: true }),
     findById: vi.fn().mockResolvedValue(current),
+    findPublicById: vi.fn().mockResolvedValue(current),
     list: vi.fn(),
     create: vi.fn().mockResolvedValue(product()),
     createWithMedia: vi
@@ -82,6 +85,12 @@ function harness(existingMedia: ProductMediaDto[] = []) {
       .mockImplementation((_data: unknown, media: ProductMediaDto[]) =>
         Promise.resolve(product(storedMedia(media))),
       ),
+    createInTransaction: vi
+      .fn()
+      .mockImplementation((_transaction: unknown, data: unknown) => repository.create(data)),
+    createWithMediaInTransaction: vi
+      .fn()
+      .mockImplementation((_transaction: unknown, data: unknown, media: ProductMediaDto[]) => repository.createWithMedia(data, media)),
     update: vi
       .fn()
       .mockImplementation((_id: string, data: Record<string, unknown>) =>
@@ -96,6 +105,12 @@ function harness(existingMedia: ProductMediaDto[] = []) {
           media: ProductMediaDto[],
         ) => Promise.resolve({ ...product(storedMedia(media)), ...data }),
       ),
+    updateInTransaction: vi
+      .fn()
+      .mockImplementation((_transaction: unknown, id: string, data: Record<string, unknown>, version: number) => repository.update(id, data, version)),
+    replaceMediaInTransaction: vi
+      .fn()
+      .mockImplementation((_transaction: unknown, id: string, data: Record<string, unknown>, media: ProductMediaDto[], version: number) => repository.replaceMedia(id, data, media, version)),
   };
   const mediaService = {
     verifyProductMedia: vi.fn().mockImplementation((item: ProductMediaDto) =>
@@ -112,6 +127,9 @@ function harness(existingMedia: ProductMediaDto[] = []) {
     ),
     verifyProductImage: vi.fn(),
     deleteImageIfUnreferenced: vi.fn().mockResolvedValue(true),
+    withReservedAssets: vi
+      .fn()
+      .mockImplementation((_assets: unknown, operation: (transaction: object) => Promise<unknown>) => operation({})),
   };
   const publisher = {
     syncAfterCreate: vi
@@ -268,6 +286,7 @@ describe('ProductsService multi-media', () => {
         expect.objectContaining({ fileId: 'image-0' }),
         expect.objectContaining({ fileId: 'image-1' }),
       ]),
+      0,
     );
   });
 
@@ -359,14 +378,19 @@ describe('ProductsService multi-media', () => {
       .mockResolvedValueOnce({ data: [record], total: 1 })
       .mockResolvedValueOnce({ data: [record], total: 1 });
     const publicResult = await service.findPublic({});
+    repository.findPublicById.mockResolvedValue(record);
+    const detail = await service.findOnePublic(productId);
     const manageResult = await service.findForAdmin({});
-    expect(publicResult.data[0].media[0]).toEqual({
+    expect(publicResult.data[0]).not.toHaveProperty('media');
+    expect(publicResult.data[0]).not.toHaveProperty('description');
+    expect(publicResult.data[0].imageVariants?.card).toContain('w-480');
+    expect(detail.media[0]).toMatchObject({
       id: media[0].id,
       type: ProductMediaType.IMAGE,
       url: media[0].url,
       position: 0,
     });
-    expect(publicResult.data[0].media[0]).not.toHaveProperty('fileId');
+    expect(detail.media[0]).not.toHaveProperty('fileId');
     expect(manageResult.data[0].media[0]).toMatchObject({
       fileId: 'image-0',
       mimeType: 'image/jpeg',

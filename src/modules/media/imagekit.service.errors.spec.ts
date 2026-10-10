@@ -3,7 +3,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { createConfigService } from '../../../test/helpers/config.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sdk = vi.hoisted(() => ({
@@ -29,12 +29,12 @@ describe('ImageKitService error safety', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     service = new ImageKitService(
-      new ConfigService({ IMAGEKIT_PRIVATE_KEY: 'fake-private-key' }),
+      createConfigService({ IMAGEKIT_PRIVATE_KEY: 'fake-private-key' }),
     );
   });
 
   it('maps provider not-found without making a real request', async () => {
-    sdk.get.mockRejectedValueOnce(new NotFoundError());
+    sdk.get.mockRejectedValueOnce(new NotFoundError(404, {}, 'File not found', new Headers()));
     await expect(service.getFile('missing-file')).rejects.toBeInstanceOf(
       NotFoundException,
     );

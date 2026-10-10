@@ -1,7 +1,8 @@
 import { BadGatewayException, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { createConfigService } from '../../../test/helpers/config.js';
 import {
   Prisma,
+  ProductAvailabilityStatus,
   ProductMediaType,
   TelegramProductSyncStatus,
 } from '../../generated/prisma/client.js';
@@ -16,8 +17,7 @@ const product = {
   imageUrl: 'https://ik.imagekit.io/account/products/photo.jpg',
   imageFileId: 'file-1',
   category: { name: 'Kiyim' },
-  isAvailable: true,
-  isActive: true,
+  availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
   telegramChannelMessageId: null,
   telegramButtonMessageId: null,
   telegramPublishedAt: null,
@@ -69,9 +69,8 @@ describe('ProductTelegramPublisherService', () => {
     service = new ProductTelegramPublisherService(
       telegram as never,
       repository as never,
-      new ConfigService({
+      createConfigService({
         TELEGRAM_CHANNEL_ID: '@shop_channel',
-        TELEGRAM_SHOP_URL: 'https://shop.example/product',
         TELEGRAM_BOT_USERNAME: 'lumiera_bot',
         TELEGRAM_MINI_APP_SHORT_NAME: 'shop',
       }),
@@ -331,7 +330,7 @@ describe('ProductTelegramPublisherService', () => {
     const serviceWithoutDeepLink = new ProductTelegramPublisherService(
       telegram as never,
       repository as never,
-      new ConfigService({ TELEGRAM_CHANNEL_ID: '@shop_channel' }),
+      createConfigService({ TELEGRAM_CHANNEL_ID: '@shop_channel' }),
     );
 
     const result = await serviceWithoutDeepLink.syncAfterCreate(product);

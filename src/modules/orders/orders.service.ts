@@ -1,11 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { OrderStatus, Prisma } from '../../generated/prisma/client.js';
+import { createHash } from 'node:crypto';
+import {
+  OrderStatus,
+  Prisma,
+  ProductAvailabilityStatus,
+} from '../../generated/prisma/client.js';
 import { UsersService } from '../users/users.service.js';
 import { WorkHoursService } from '../work-hours/work-hours.service.js';
 import { ORDER_STATUS_TRANSITIONS } from './constants/order-status-transitions.js';
@@ -14,7 +19,11 @@ import type { QueryOrdersDto } from './dto/query-orders.dto.js';
 import { OrdersRepository } from './orders.repository.js';
 import { AuditAction, AuditEntityType } from '../../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
-import { NotificationsService } from '../notifications/notifications.service.js';
+import {
+  MAX_ORDER_AMOUNT,
+  MAX_ORDER_ITEMS,
+  MAX_ORDER_QUANTITY,
+} from './constants/order-limits.js';
 
 const orderNotFound = () =>
   new NotFoundException({
@@ -56,22 +65,52 @@ export const ORDER_CONFIRMATION_MINUTES = 240;
 
 @Injectable()
 export class OrdersService {
-  private readonly logger = new Logger(OrdersService.name);
-
   constructor(
     private readonly ordersRepository: OrdersRepository,
     private readonly usersService: UsersService,
     private readonly workHoursService: WorkHoursService,
     private readonly auditService?: AuditService,
-    private readonly notificationsService?: NotificationsService,
   ) {}
 
-  async createOrder(actor: { sub: string }, dto: CreateOrderDto) {
+  async createOrder(
+    actor: { sub: string },
+    dto: CreateOrderDto,
+    idempotencyKey: string,
+  ) {
     const user = await this.usersService.findById(actor.sub);
     if (!user) throw orderNotFound();
     if (user.isBlocked) throw blockedUser();
 
     const merged = this.mergeDuplicateItems(dto.items);
+    const requestHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          items: [...merged].sort((left, right) =>
+            left.productId.localeCompare(right.productId),
+          ),
+          phone: dto.phone ?? null,
+          deliveryAddress: dto.deliveryAddress ?? null,
+          btcPostBranchNumber: dto.btcPostBranchNumber ?? null,
+          latitude: dto.latitude ?? null,
+          longitude: dto.longitude ?? null,
+          note: dto.note ?? null,
+        }),
+      )
+      .digest('hex');
+    const existing = await this.ordersRepository.findByIdempotencyKey(
+      actor.sub,
+      idempotencyKey,
+    );
+    if (existing) {
+      if (existing.requestHash !== requestHash) {
+        throw new ConflictException({
+          error: 'IDEMPOTENCY_KEY_CONFLICT',
+          message:
+            'This Idempotency-Key was already used for a different request',
+        });
+      }
+      return this.toResponse(existing);
+    }
     const products = await this.ordersRepository.findProductsForOrder(
       merged.map((item) => item.productId),
     );
@@ -86,18 +125,21 @@ export class OrdersService {
     const validated = merged.map((item) => {
       const product = productMap.get(item.productId);
       if (!product) throw productMissing();
-      if (!product.isActive || !product.category.isActive) {
+      if (!product.category.isActive) {
         throw productInactive();
       }
-      if (!product.isAvailable) throw productUnavailable();
+      if (product.availabilityStatus === ProductAvailabilityStatus.OUT_OF_STOCK)
+        throw productUnavailable();
+      const lineTotal = new Prisma.Decimal(product.price.toString()).mul(
+        item.quantity,
+      );
+      this.ensureValidAmount(lineTotal);
       return {
         productId: item.productId,
         productName: product.name,
         unitPrice: product.price,
         quantity: item.quantity,
-        lineTotal: new Prisma.Decimal(product.price.toString()).mul(
-          item.quantity,
-        ),
+        lineTotal,
       };
     });
 
@@ -106,9 +148,12 @@ export class OrdersService {
       new Prisma.Decimal('0.00'),
     );
     const total = subtotal;
+    this.ensureValidAmount(total);
     const phone = dto.phone ?? user.phone ?? null;
     const order = await this.ordersRepository.createOrder({
       userId: actor.sub,
+      idempotencyKey,
+      requestHash,
       status: OrderStatus.PENDING_CONFIRMATION,
       phone,
       deliveryAddress: dto.deliveryAddress ?? null,
@@ -135,10 +180,6 @@ export class OrdersService {
         lineTotal: new Prisma.Decimal(item.lineTotal.toString()),
       })),
     });
-
-    await this.notifySafely(() =>
-      this.notificationsService?.notifyNewOrder(order),
-    );
 
     return this.toResponse(order);
   }
@@ -193,7 +234,6 @@ export class OrdersService {
       },
       catalog: {
         productsTotal: summary.productsTotal,
-        productsActive: summary.productsActive,
         productsAvailable: summary.productsAvailable,
         categoriesTotal: summary.categoriesTotal,
         categoriesActive: summary.categoriesActive,
@@ -249,9 +289,6 @@ export class OrdersService {
         metadata: { from: current.status, to: OrderStatus.CONFIRMED },
       });
     }
-    await this.notifySafely(() =>
-      this.notificationsService?.notifyOrderConfirmed(updated),
-    );
     return this.toResponse(updated);
   }
 
@@ -266,11 +303,16 @@ export class OrdersService {
       });
     }
 
-    const updated = await this.updateStatusAtomically(id, current.status, {
-      status: OrderStatus.CANCELLED,
-      cancelledAt: new Date(),
-      cancelReason: reason ?? null,
-    });
+    const updated = await this.updateStatusAtomically(
+      id,
+      current.status,
+      {
+        status: OrderStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancelReason: reason ?? null,
+      },
+      true,
+    );
     if (actorUserId) {
       await this.auditService?.log({
         actorUserId,
@@ -280,9 +322,6 @@ export class OrdersService {
         metadata: { from: current.status, to: OrderStatus.CANCELLED, reason },
       });
     }
-    await this.notifySafely(() =>
-      this.notificationsService?.notifyOrderRejected(updated),
-    );
     return this.toResponse(updated);
   }
 
@@ -318,9 +357,6 @@ export class OrdersService {
         metadata: { from: current.status, to: status },
       });
     }
-    await this.notifySafely(() =>
-      this.notificationsService?.notifyOrderStatusChanged(updated),
-    );
     return this.toResponse(updated);
   }
 
@@ -357,16 +393,55 @@ export class OrdersService {
   private mergeDuplicateItems(
     items: { productId: string; quantity: number }[],
   ) {
+    if (
+      !Array.isArray(items) ||
+      items.length < 1 ||
+      items.length > MAX_ORDER_ITEMS
+    ) {
+      throw new BadRequestException({
+        error: 'INVALID_ORDER_ITEMS',
+        message: `Order must contain between 1 and ${MAX_ORDER_ITEMS} items`,
+      });
+    }
     const map = new Map<string, { productId: string; quantity: number }>();
     for (const item of items) {
+      this.ensureValidQuantity(item.quantity);
       const existing = map.get(item.productId);
       if (existing) {
         existing.quantity += item.quantity;
+        this.ensureValidQuantity(existing.quantity);
       } else {
         map.set(item.productId, { ...item });
       }
     }
     return [...map.values()];
+  }
+
+  private ensureValidQuantity(quantity: number): void {
+    if (
+      !Number.isSafeInteger(quantity) ||
+      quantity < 1 ||
+      quantity > MAX_ORDER_QUANTITY
+    ) {
+      throw new BadRequestException({
+        error: 'INVALID_ORDER_QUANTITY',
+        message: `Quantity must be an integer between 1 and ${MAX_ORDER_QUANTITY}`,
+      });
+    }
+  }
+
+  private ensureValidAmount(amount: Prisma.Decimal): void {
+    if (
+      !amount.isFinite() ||
+      amount.isNegative() ||
+      amount.greaterThan(MAX_ORDER_AMOUNT) ||
+      amount.decimalPlaces() > 2
+    ) {
+      throw new BadRequestException({
+        error: 'ORDER_TOTAL_LIMIT',
+        message: 'Order total exceeds the supported amount',
+      });
+    }
   }
 
   private async ensureCurrentProductsAvailable(
@@ -377,18 +452,29 @@ export class OrdersService {
       throw productUnavailable();
     }
 
-    const uniqueProductIds = [...new Set(productIds as string[])];
+    const uniqueProductIds = [
+      ...new Set(
+        productIds.filter(
+          (productId): productId is string => productId !== null,
+        ),
+      ),
+    ];
     const products =
       await this.ordersRepository.findProductsForOrder(uniqueProductIds);
     if (products.length !== uniqueProductIds.length) throw productMissing();
     if (
       products.some(
-        (product) => !product.isActive || !product.category.isActive,
+        (product) => !product.category.isActive,
       )
     ) {
       throw productInactive();
     }
-    if (products.some((product) => !product.isAvailable)) {
+    if (
+      products.some(
+        (product) =>
+          product.availabilityStatus === ProductAvailabilityStatus.OUT_OF_STOCK,
+      )
+    ) {
       throw productUnavailable();
     }
   }
@@ -429,9 +515,17 @@ export class OrdersService {
     id: string,
     currentStatus: OrderStatus,
     data: Prisma.OrderUpdateInput,
+    rejected = false,
   ) {
     try {
-      return await this.ordersRepository.updateStatus(id, currentStatus, data);
+      return rejected
+        ? await this.ordersRepository.updateStatus(
+            id,
+            currentStatus,
+            data,
+            true,
+          )
+        : await this.ordersRepository.updateStatus(id, currentStatus, data);
     } catch (error) {
       if (this.isPrismaError(error, 'P2025')) throw orderStatusChanged();
       throw error;
@@ -445,16 +539,6 @@ export class OrdersService {
       'code' in error &&
       (error as { code?: unknown }).code === code
     );
-  }
-
-  private async notifySafely(
-    operation: () => Promise<void> | undefined,
-  ): Promise<void> {
-    try {
-      await operation();
-    } catch {
-      this.logger.error('Order notification failed after business operation');
-    }
   }
 
   private toResponse(order: {

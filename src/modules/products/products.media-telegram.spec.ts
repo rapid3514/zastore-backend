@@ -2,6 +2,7 @@ import {
   AuditAction,
   AuditEntityType,
   Prisma,
+  ProductAvailabilityStatus,
   TelegramProductSyncStatus,
 } from '../../generated/prisma/client.js';
 import { Logger, NotFoundException } from '@nestjs/common';
@@ -21,8 +22,9 @@ function product(overrides: Record<string, unknown> = {}) {
     imageFileId: 'old-file',
     categoryId,
     category: { id: categoryId, name: 'Kiyim', slug: 'kiyim' },
-    isAvailable: true,
+    availabilityStatus: ProductAvailabilityStatus.IN_STOCK,
     isActive: true,
+    version: 0,
     telegramChannelMessageId: 77,
     telegramButtonMessageId: 78,
     telegramPublishedAt: new Date(),
@@ -126,6 +128,7 @@ describe('ProductsService media and Telegram flow', () => {
           }),
         );
       }),
+      createInTransaction: vi.fn().mockImplementation((_transaction: unknown, data: Record<string, unknown>) => repository.create(data)),
     };
     const media = {
       verifyProductImage: vi.fn().mockImplementation(() => {
@@ -138,6 +141,7 @@ describe('ProductsService media and Telegram flow', () => {
           size: 100,
         });
       }),
+      withReservedAssets: vi.fn().mockImplementation((_assets: unknown, operation: (transaction: object) => Promise<unknown>) => operation({})),
     };
     const publisher = {
       syncAfterCreate: vi.fn().mockImplementation((created) => {
@@ -197,12 +201,14 @@ describe('ProductsService media and Telegram flow', () => {
         isActive: true,
       }),
       create: vi.fn().mockResolvedValue(created),
+      createInTransaction: vi.fn().mockImplementation(() => repository.create()),
     };
     const media = {
       verifyProductImage: vi.fn().mockResolvedValue({
         fileId: 'old-file',
         url: created.imageUrl,
       }),
+      withReservedAssets: vi.fn().mockImplementation((_assets: unknown, operation: (transaction: object) => Promise<unknown>) => operation({})),
     };
     const publisher = {
       syncAfterCreate: vi.fn().mockResolvedValue(
@@ -241,7 +247,7 @@ describe('ProductsService media and Telegram flow', () => {
       price: new Prisma.Decimal('190000.00'),
       categoryId: nextCategoryId,
       category: { id: nextCategoryId, name: 'Yangi kategoriya', slug: 'yangi' },
-      isAvailable: false,
+      availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK,
     });
     const repository = {
       findById: vi.fn().mockResolvedValue(product()),
@@ -264,15 +270,15 @@ describe('ProductsService media and Telegram flow', () => {
       description: 'Yangi tavsif',
       price: 190000,
       categoryId: nextCategoryId,
-      isAvailable: false,
+      availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK,
     });
     expect(repository.update).toHaveBeenCalledWith(productId, {
       name: 'Yangi nom',
       description: 'Yangi tavsif',
       price: 190000,
       categoryId: nextCategoryId,
-      isAvailable: false,
-    });
+      availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK,
+    }, 0);
     expect(publisher.syncAfterUpdate).toHaveBeenCalledWith(updated, false);
   });
 
@@ -290,6 +296,7 @@ describe('ProductsService media and Telegram flow', () => {
         events.push('db-update');
         return Promise.resolve(updated);
       }),
+      updateInTransaction: vi.fn().mockImplementation((_transaction: unknown, ...args: [string, Record<string, unknown>, number]) => repository.update(...args)),
     };
     const media = {
       verifyProductImage: vi.fn().mockImplementation(() => {
@@ -303,6 +310,7 @@ describe('ProductsService media and Telegram flow', () => {
         events.push('old-image-delete');
         return Promise.resolve(true);
       }),
+      withReservedAssets: vi.fn().mockImplementation((_assets: unknown, operation: (transaction: object) => Promise<unknown>) => operation({})),
     };
     const publisher = {
       syncAfterUpdate: vi.fn().mockImplementation(() => {
@@ -327,7 +335,7 @@ describe('ProductsService media and Telegram flow', () => {
     expect(repository.update).toHaveBeenCalledWith(productId, {
       imageFileId: 'new-file',
       imageUrl: 'https://ik.imagekit.io/account/products/new.jpg',
-    });
+    }, 0);
     expect(publisher.syncAfterUpdate).toHaveBeenCalledWith(updated, true);
     expect(media.deleteImageIfUnreferenced).toHaveBeenCalledWith('old-file');
     expect(repository.update.mock.invocationCallOrder[0]).toBeLessThan(
@@ -383,6 +391,7 @@ describe('ProductsService media and Telegram flow', () => {
     const repository = {
       findById: vi.fn().mockResolvedValue(existing),
       update: vi.fn().mockResolvedValue(updated),
+      updateInTransaction: vi.fn().mockImplementation((_transaction: unknown, ...args: [string, Record<string, unknown>, number]) => repository.update(...args)),
     };
     const media = {
       verifyProductImage: vi.fn().mockResolvedValue({
@@ -392,6 +401,7 @@ describe('ProductsService media and Telegram flow', () => {
       deleteImageIfUnreferenced: vi
         .fn()
         .mockRejectedValue(new Error('provider unavailable')),
+      withReservedAssets: vi.fn().mockImplementation((_assets: unknown, operation: (transaction: object) => Promise<unknown>) => operation({})),
     };
     const publisher = { syncAfterUpdate: vi.fn().mockResolvedValue(updated) };
     const service = new ProductsService(
@@ -417,10 +427,9 @@ describe('ProductsService media and Telegram flow', () => {
     const existing = product();
     const repository = {
       findById: vi.fn().mockResolvedValue(existing),
-      countOrderItems: vi.fn().mockResolvedValue(0),
-      delete: vi.fn().mockImplementation(() => {
+      removeOrDeactivate: vi.fn().mockImplementation(() => {
         events.push('db-delete');
-        return Promise.resolve(existing);
+        return Promise.resolve({ product: existing, softDeleted: false });
       }),
     };
     const publisher = {
@@ -444,6 +453,7 @@ describe('ProductsService media and Telegram flow', () => {
 
     await service.remove(productId);
     expect(events).toEqual(['db-delete', 'telegram-delete', 'image-delete']);
+    expect(repository.removeOrDeactivate).toHaveBeenCalledWith(productId, 0);
     expect(publisher.deleteProductPostsBestEffort).toHaveBeenCalledWith(
       existing,
     );
@@ -451,12 +461,13 @@ describe('ProductsService media and Telegram flow', () => {
   });
 
   it('soft-deletes the product and removes its Telegram media and button posts', async () => {
-    const inactive = product({ isActive: false, isAvailable: false });
+    const inactive = product({
+      isActive: false,
+      availabilityStatus: ProductAvailabilityStatus.OUT_OF_STOCK,
+    });
     const repository = {
       findById: vi.fn().mockResolvedValue(product()),
-      countOrderItems: vi.fn().mockResolvedValue(1),
-      update: vi.fn().mockResolvedValue(inactive),
-      delete: vi.fn(),
+      removeOrDeactivate: vi.fn().mockResolvedValue({ product: inactive, softDeleted: true }),
     };
     const publisher = {
       removeProductPostsBestEffort: vi.fn().mockResolvedValue(undefined),
@@ -470,14 +481,10 @@ describe('ProductsService media and Telegram flow', () => {
     );
 
     await service.remove(productId);
-    expect(repository.update).toHaveBeenCalledWith(productId, {
-      isActive: false,
-      isAvailable: false,
-    });
+    expect(repository.removeOrDeactivate).toHaveBeenCalledWith(productId, 0);
     expect(publisher.removeProductPostsBestEffort).toHaveBeenCalledWith(
       inactive,
     );
-    expect(repository.delete).not.toHaveBeenCalled();
     expect(media.deleteImageIfUnreferenced).not.toHaveBeenCalled();
   });
 
@@ -490,6 +497,7 @@ describe('ProductsService media and Telegram flow', () => {
     const repository = {
       findById: vi.fn().mockResolvedValue(existing),
       update: vi.fn().mockResolvedValue(updated),
+      updateInTransaction: vi.fn().mockImplementation((_transaction: unknown, ...args: [string, Record<string, unknown>, number]) => repository.update(...args)),
     };
     const audit = { log: vi.fn().mockResolvedValue(undefined) };
     const media = {
@@ -498,6 +506,7 @@ describe('ProductsService media and Telegram flow', () => {
         url: updated.imageUrl,
       }),
       deleteImageIfUnreferenced: vi.fn().mockResolvedValue(true),
+      withReservedAssets: vi.fn().mockImplementation((_assets: unknown, operation: (transaction: object) => Promise<unknown>) => operation({})),
     };
     const publisher = { syncAfterUpdate: vi.fn().mockResolvedValue(updated) };
     const service = new ProductsService(

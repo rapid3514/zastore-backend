@@ -1,5 +1,4 @@
 import {
-  BadGatewayException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -20,6 +19,8 @@ import type {
   TelegramMessage,
   TelegramUpdate,
 } from './telegram.types.js';
+import { getConfiguration } from '../../config/configuration.js';
+import { TelegramDeliveryError } from '../notifications/telegram-delivery.error.js';
 
 const messages = {
   registration: 'Ro‘yxatdan o‘tish uchun telefon raqamingizni yuboring',
@@ -81,7 +82,7 @@ export class TelegramService {
   }
 
   async setMyCommands(): Promise<void> {
-    const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+    const token = getConfiguration(this.configService).telegram.botToken;
     if (!token) return;
 
     try {
@@ -91,9 +92,7 @@ export class TelegramService {
         { commands: botCommands },
       );
       if (statusCode < 200 || statusCode >= 300 || !payload.ok) {
-        this.logger.error(
-          `Telegram commands could not be registered: ${payload.description ?? 'unknown error'}`,
-        );
+        this.logger.error('Telegram commands could not be registered');
       }
     } catch {
       this.logger.error('Telegram commands could not be registered');
@@ -268,7 +267,7 @@ export class TelegramService {
   }
 
   private async sendShopButton(chatId: number): Promise<void> {
-    const miniAppUrl = this.configService.get<string>('MINI_APP_URL');
+    const miniAppUrl = getConfiguration(this.configService).telegram.miniAppUrl;
     if (!miniAppUrl) {
       throw new ServiceUnavailableException('MINI_APP_URL is not configured');
     }
@@ -286,7 +285,7 @@ export class TelegramService {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
     if (!message || !Number.isSafeInteger(message.message_id)) {
-      throw new BadGatewayException('Telegram response is missing message_id');
+      throw new TelegramDeliveryError('uncertain', 'TELEGRAM_INVALID_RESPONSE');
     }
     return message.message_id;
   }
@@ -305,7 +304,7 @@ export class TelegramService {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
     if (!message || !Number.isSafeInteger(message.message_id)) {
-      throw new BadGatewayException('Telegram response is missing message_id');
+      throw new TelegramDeliveryError('uncertain', 'TELEGRAM_INVALID_RESPONSE');
     }
     return message.message_id;
   }
@@ -324,7 +323,7 @@ export class TelegramService {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
     if (!message || !Number.isSafeInteger(message.message_id)) {
-      throw new BadGatewayException('Telegram response is missing message_id');
+      throw new TelegramDeliveryError('uncertain', 'TELEGRAM_INVALID_RESPONSE');
     }
     return message.message_id;
   }
@@ -342,9 +341,7 @@ export class TelegramService {
       messages.length !== media.length ||
       messages.some((message) => !Number.isSafeInteger(message.message_id))
     ) {
-      throw new BadGatewayException(
-        'Telegram response is missing media group message_id values',
-      );
+      throw new TelegramDeliveryError('uncertain', 'TELEGRAM_INVALID_RESPONSE');
     }
     return messages.map((message) => message.message_id);
   }
@@ -407,7 +404,7 @@ export class TelegramService {
     method: string,
     body: Record<string, unknown>,
   ): Promise<T> {
-    const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+    const token = getConfiguration(this.configService).telegram.botToken;
     if (!token) {
       throw new ServiceUnavailableException(
         'TELEGRAM_BOT_TOKEN is not configured',
@@ -419,13 +416,15 @@ export class TelegramService {
     try {
       ({ statusCode, payload } = await postTelegram<T>(token, method, body));
     } catch {
-      throw new BadGatewayException('Telegram API is unavailable');
+      throw new TelegramDeliveryError('uncertain', 'TELEGRAM_UNAVAILABLE');
     }
 
     if (statusCode < 200 || statusCode >= 300 || !payload.ok) {
-      throw new BadGatewayException(
-        payload.description ?? 'Telegram API request failed',
-      );
+      if (payload.ok === false) {
+        const retryable = statusCode === 429 || statusCode >= 500;
+        throw new TelegramDeliveryError(retryable ? 'retryable' : 'permanent', statusCode === 429 ? 'TELEGRAM_RATE_LIMIT' : 'TELEGRAM_REJECTED');
+      }
+      throw new TelegramDeliveryError('uncertain', 'TELEGRAM_INVALID_RESPONSE');
     }
     if (payload.result === undefined) {
       return undefined as T;

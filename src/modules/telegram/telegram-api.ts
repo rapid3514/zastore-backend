@@ -11,29 +11,7 @@ export function postTelegram<T>(
   method: string,
   body: Record<string, unknown>,
 ): Promise<TelegramHttpResponse<T>> {
-  return postWithRetry(token, method, body);
-}
-
-async function postWithRetry<T>(
-  token: string,
-  method: string,
-  body: Record<string, unknown>,
-): Promise<TelegramHttpResponse<T>> {
-  let lastError: unknown;
-
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await postOnce<T>(token, method, body);
-      if (response.statusCode < 500 || attempt === 3) return response;
-    } catch (error) {
-      lastError = error;
-      if (attempt === 3) throw error;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, attempt * 250));
-  }
-
-  throw lastError;
+  return postOnce(token, method, body);
 }
 
 function postOnce<T>(
@@ -62,7 +40,9 @@ function postOnce<T>(
 
         response.on('data', (chunk: string) => {
           responseBody += chunk;
+          if (Buffer.byteLength(responseBody) > 1024 * 1024) apiRequest.destroy(new Error('Telegram response exceeds limit'));
         });
+        response.on('error', reject);
         response.on('end', () => {
           try {
             resolve({
