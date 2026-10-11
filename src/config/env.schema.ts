@@ -18,6 +18,8 @@ export const envSchema = z.object({
   ADMIN_APP_URL: optionalUrl,
   CORS_ALLOWED_ORIGINS: optionalString,
   TRUST_PROXY_CIDRS: z.string().default(''),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(2).default(0),
+  RENDER_EXTERNAL_HOSTNAME: optionalString,
   REQUEST_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).max(1024 * 1024).default(65_536),
   DATABASE_URL: z.url().startsWith('postgresql://'),
   REDIS_URL: z.preprocess((value) => value === '' ? undefined : value, z.url().regex(/^rediss?:\/\//).optional()),
@@ -56,6 +58,7 @@ export const envSchema = z.object({
     if (!family || rest.length || (prefix !== undefined && (!/^\d+$/.test(prefix) || Number(prefix) > (family === 4 ? 32 : 128)))) issue('TRUST_PROXY_CIDRS', 'must contain explicit IP addresses or CIDR networks');
     if (prefix === '0') issue('TRUST_PROXY_CIDRS', 'cannot trust every address');
   }
+  if (environment.TRUST_PROXY_HOPS > 0 && environment.TRUST_PROXY_CIDRS.trim()) issue('TRUST_PROXY_HOPS', 'cannot be combined with TRUST_PROXY_CIDRS');
   for (const key of ['APP_PUBLIC_URL', 'MINI_APP_URL', 'ADMIN_APP_URL', 'IMAGEKIT_URL_ENDPOINT'] as const) {
     const value = environment[key];
     if (!value) continue;
@@ -100,7 +103,11 @@ export type Environment = z.infer<typeof envSchema>;
 export function validateEnvironment(config: Record<string, unknown>): Environment {
   const unknown = Object.keys(config).filter((key) => /^(?:APP_|ADMIN_APP_|MINI_APP_|CORS_|BACKEND_|FRONTEND_|WEBAPP_|MINIAPP_|JWT_|TELEGRAM_|IMAGEKIT_|MEDIA_|DATABASE_|REDIS_|ORDER_EXPIRATION_|OUTBOX_|TRUST_PROXY_|REQUEST_BODY_)/.test(key) && !(key in envSchema.shape));
   if (unknown.length) throw new Error(`Unknown application configuration: ${unknown.sort().join(', ')}`);
-  const parsed = envSchema.safeParse(config);
+  const normalized = { ...config };
+  if (!normalized.APP_PUBLIC_URL && typeof normalized.RENDER_EXTERNAL_HOSTNAME === 'string' && normalized.RENDER_EXTERNAL_HOSTNAME.trim()) {
+    normalized.APP_PUBLIC_URL = `https://${normalized.RENDER_EXTERNAL_HOSTNAME.trim()}`;
+  }
+  const parsed = envSchema.safeParse(normalized);
   if (!parsed.success) throw new Error(`Invalid environment configuration: ${parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`);
   return parsed.data;
 }

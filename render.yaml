@@ -1,0 +1,106 @@
+services:
+  - type: keyvalue
+    name: zastore-backend-cache
+    plan: free
+    region: oregon
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+    persistenceMode: off
+
+  - type: web
+    name: zastore-backend
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: npm ci --include=dev && npm run prisma:generate && npm run build
+    startCommand: node scripts/release-migrate.js && node dist/main.js
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_PREFIX
+        value: api/v1
+      - key: TZ
+        value: Asia/Tashkent
+      - key: MINI_APP_URL
+        value: https://shop-front-mocha.vercel.app
+      - key: ADMIN_APP_URL
+        value: ''
+      - key: CORS_ALLOWED_ORIGINS
+        value: ''
+      - key: TRUST_PROXY_HOPS
+        value: '1'
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zastore-backend-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: zastore-backend-cache
+          type: keyvalue
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 30d
+      - key: JWT_ISSUER
+        value: zastore-backend
+      - key: JWT_AUDIENCE
+        value: zastore-mini-app
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_INIT_DATA_MAX_AGE_SECONDS
+        value: '300'
+      - key: SUPER_ADMIN_TELEGRAM_ID
+        sync: false
+      - key: TELEGRAM_CHANNEL_ID
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: TELEGRAM_MINI_APP_SHORT_NAME
+        sync: false
+      - key: TELEGRAM_MINI_APP_USE_MAIN
+        sync: false
+      - key: IMAGEKIT_PUBLIC_KEY
+        sync: false
+      - key: IMAGEKIT_PRIVATE_KEY
+        sync: false
+      - key: IMAGEKIT_URL_ENDPOINT
+        sync: false
+      - key: IMAGEKIT_PRODUCT_FOLDER
+        value: /products
+      - key: REQUEST_BODY_LIMIT_BYTES
+        value: '65536'
+      - key: MEDIA_MAX_IMAGE_BYTES
+        value: '5242880'
+      - key: MEDIA_MAX_IMAGE_WIDTH
+        value: '6000'
+      - key: MEDIA_MAX_IMAGE_HEIGHT
+        value: '6000'
+      - key: MEDIA_MAX_VIDEO_BYTES
+        value: '157286400'
+      - key: MEDIA_MAX_VIDEO_DURATION_SECONDS
+        value: '60'
+      - key: ORDER_EXPIRATION_INTERVAL_MS
+        value: '30000'
+      - key: OUTBOX_POLL_INTERVAL_MS
+        value: '5000'
+      - key: OUTBOX_MAX_ATTEMPTS
+        value: '8'
+
+databases:
+  - name: zastore-backend-db
+    plan: free
+    region: oregon
+    databaseName: zastore_backend
+    user: zastore
+    ipAllowList: []

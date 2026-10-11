@@ -45,6 +45,14 @@ describe('canonical environment validation', () => {
   it.each(['true', '0.0.0.0/0', '::/0', '127.0.0.1/33'])('rejects unsafe proxy trust %s', (value) => {
     expect(() => validateEnvironment({ ...testEnvironment, TRUST_PROXY_CIDRS: value })).toThrow('TRUST_PROXY_CIDRS');
   });
+  it('derives the public URL from Render and trusts exactly one documented proxy hop', () => {
+    const environment = validateEnvironment({ ...productionEnvironment, APP_PUBLIC_URL: undefined, RENDER_EXTERNAL_HOSTNAME: 'zastore-backend.onrender.com', TRUST_PROXY_HOPS: '1' });
+    expect(environment.APP_PUBLIC_URL).toBe('https://zastore-backend.onrender.com');
+    expect(createConfiguration(environment).app.trustProxy).toBe(1);
+  });
+  it('rejects mixed proxy trust strategies', () => {
+    expect(() => validateEnvironment({ ...testEnvironment, TRUST_PROXY_CIDRS: '172.30.0.0/24', TRUST_PROXY_HOPS: '1' })).toThrow('cannot be combined');
+  });
   it('uses exact boolean semantics', () => {
     expect(validateEnvironment({ ...testEnvironment, TELEGRAM_MINI_APP_USE_MAIN: 'false' }).TELEGRAM_MINI_APP_USE_MAIN).toBe(false);
   });

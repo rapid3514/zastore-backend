@@ -1,7 +1,8 @@
 FROM node:22-slim AS dependencies
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
 
 FROM dependencies AS build
 COPY . .
@@ -16,16 +17,23 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma7.config.ts ./prisma7.config.ts
 COPY --from=build /app/scripts ./scripts
+# The opt-in webhook operations service executes the TypeScript config parser
+# with tsx from this migration/operations image.
+COPY --from=build /app/src/config ./src/config
 ENV NODE_ENV=production
 USER node
 CMD ["node", "scripts/release-migrate.js"]
+
+FROM dependencies AS production-dependencies
+# Prune in an intermediate filesystem so deleted development packages are not
+# retained in a lower layer of the final runtime image.
+RUN --mount=type=cache,target=/root/.npm npm prune --omit=dev --omit=peer
 
 FROM node:22-slim AS production
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
-# Prisma CLI is an optional peer and is only needed by the migration artifact.
-RUN npm ci --omit=dev --omit=peer && npm cache clean --force
+COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 3000

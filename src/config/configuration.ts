@@ -21,8 +21,10 @@ export function createConfiguration(environment: Environment) {
     ...[miniAppUrl, adminAppUrl].filter((value): value is string => Boolean(value)).map((value) => new URL(value).origin),
     ...(environment.CORS_ALLOWED_ORIGINS ?? '').split(',').map((value) => value.trim()).filter(Boolean).map((value) => new URL(value).origin),
   ])];
+  const trustedCidrs = environment.TRUST_PROXY_CIDRS.split(',').map((value) => value.trim()).filter(Boolean);
+  const trustProxy = trustedCidrs.length ? trustedCidrs : environment.TRUST_PROXY_HOPS || false;
   return {
-    app: { environment: environment.NODE_ENV, isProduction: environment.NODE_ENV === 'production', port: environment.PORT, apiPrefix: environment.API_PREFIX, timeZone: environment.TZ, publicUrl, miniAppUrl, adminAppUrl, corsOrigins, trustProxy: environment.TRUST_PROXY_CIDRS.split(',').map((value) => value.trim()).filter(Boolean), bodyLimitBytes: environment.REQUEST_BODY_LIMIT_BYTES },
+    app: { environment: environment.NODE_ENV, isProduction: environment.NODE_ENV === 'production', port: environment.PORT, apiPrefix: environment.API_PREFIX, timeZone: environment.TZ, publicUrl, miniAppUrl, adminAppUrl, corsOrigins, trustProxy, bodyLimitBytes: environment.REQUEST_BODY_LIMIT_BYTES },
     auth: { accessSecret: environment.JWT_ACCESS_SECRET, refreshSecret: environment.JWT_REFRESH_SECRET, accessExpiresIn: environment.JWT_ACCESS_EXPIRES_IN, refreshExpiresIn: environment.JWT_REFRESH_EXPIRES_IN, issuer: environment.JWT_ISSUER, audience: environment.JWT_AUDIENCE },
     database: { url: environment.DATABASE_URL },
     redis: { url: environment.REDIS_URL },

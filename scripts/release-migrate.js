@@ -2,10 +2,20 @@ import 'dotenv/config';
 import { readdir, readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import pg from 'pg';
-import configuration from '../dist/config/configuration.js';
 
-const { runtime } = configuration();
-const client = new pg.Client({ connectionString: runtime.database.url });
+const databaseUrl = process.env.DATABASE_URL;
+let parsedDatabaseUrl;
+try {
+  parsedDatabaseUrl = databaseUrl ? new URL(databaseUrl) : undefined;
+} catch {
+  parsedDatabaseUrl = undefined;
+}
+if (!parsedDatabaseUrl || parsedDatabaseUrl.protocol !== 'postgresql:') {
+  console.error('Migration release failed; DATABASE_URL must be a valid PostgreSQL URL.');
+  process.exit(1);
+}
+
+const client = new pg.Client({ connectionString: databaseUrl });
 try {
   await client.connect();
   const tables = await client.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");

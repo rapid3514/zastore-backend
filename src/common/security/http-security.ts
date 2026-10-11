@@ -16,7 +16,7 @@ export function isTrustedOrigin(origin: string | undefined, allowedOrigins: read
 export function configureHttpSecurity(app: INestApplication, config: RuntimeConfig): void {
   const server: Express = app.getHttpAdapter().getInstance();
   server.disable('x-powered-by');
-  server.set('trust proxy', config.app.trustProxy.length ? config.app.trustProxy : false);
+  server.set('trust proxy', config.app.trustProxy);
   app.setGlobalPrefix(config.app.apiPrefix, { exclude: [{ path: 'health', method: RequestMethod.GET }] });
   app.use(express.json({ limit: config.app.bodyLimitBytes, strict: true }));
   app.use(express.urlencoded({ extended: false, limit: config.app.bodyLimitBytes, parameterLimit: 100 }));

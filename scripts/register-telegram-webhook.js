@@ -41,7 +41,20 @@ async function updateWebhook() {
   ) {
     throw new Error('Telegram webhook URL verification failed');
   }
-  console.log('Telegram webhook registered for configured application origin');
+  const info = infoResult.result;
+  console.log(JSON.stringify({
+    status: 'registered',
+    url: info.url,
+    pendingUpdateCount: typeof info.pending_update_count === 'number'
+      ? info.pending_update_count
+      : null,
+    lastErrorDate: typeof info.last_error_date === 'number'
+      ? new Date(info.last_error_date * 1000).toISOString()
+      : null,
+    lastErrorMessage: typeof info.last_error_message === 'string'
+      ? info.last_error_message
+      : null,
+  }));
 }
 
 try {

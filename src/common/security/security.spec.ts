@@ -31,17 +31,23 @@ describe('security configuration regressions', () => {
     expect(database).not.toContain('ports:');
     expect(redis).not.toContain('ports:');
     expect(compose).toContain('internal: true');
-    expect(compose).toContain('127.0.0.1:3000:3000');
+    expect(compose).not.toContain('127.0.0.1:3000:3000');
+    expect(compose).toContain("- '443:443'");
+    expect(compose).toContain('TRUST_PROXY_CIDRS: 172.30.0.0/24');
+    expect(compose).toContain('./deploy/Caddyfile:/etc/caddy/Caddyfile:ro');
     expect(compose).toContain('NODE_ENV: production');
     expect(compose).toContain('condition: service_completed_successfully');
   });
   it('keeps migration CLI out of runtime and includes migration artifacts in release stage', () => {
     const dockerfile = readFileSync('Dockerfile', 'utf8');
     expect(dockerfile).toContain('FROM dependencies AS migration');
+    expect(dockerfile).toContain('FROM dependencies AS production-dependencies');
     expect(dockerfile).toContain('COPY --from=build /app/prisma ./prisma');
     expect(dockerfile).toContain('COPY --from=build /app/prisma7.config.ts ./prisma7.config.ts');
     expect(dockerfile).toContain('scripts/release-migrate.js');
-    expect(dockerfile).toContain('npm ci --omit=dev --omit=peer');
+    expect(dockerfile).toContain('COPY --from=build /app/src/config ./src/config');
+    expect(dockerfile).toContain('npm prune --omit=dev --omit=peer');
+    expect(dockerfile).toContain('COPY --from=production-dependencies /app/node_modules ./node_modules');
     expect(readFileSync('scripts/release-migrate.js', 'utf8')).toContain("'migrate', 'deploy'");
   });
 });

@@ -51,6 +51,12 @@ export class RateLimitStorage implements ThrottlerStorage, OnModuleInit, OnModul
   }
   async onModuleDestroy(): Promise<void> { if (this.client?.isOpen) await this.client.close(); this.memory.onApplicationShutdown(); }
 
+  async ping(): Promise<void> {
+    if (!this.client) return;
+    if (!this.client.isReady) throw new Error('Shared request protection is not connected');
+    if (await this.client.ping() !== 'PONG') throw new Error('Unexpected Redis health response');
+  }
+
   async increment(key: string, ttl: number, limit: number, blockDuration: number, throttlerName: string) {
     if (!this.client) return this.memory.increment(key, ttl, limit, blockDuration, throttlerName);
     try {
