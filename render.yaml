@@ -17,7 +17,6 @@ services:
     buildCommand: npm ci --include=dev && npm run prisma:generate && npm run build
     startCommand: node scripts/release-migrate.js && node dist/main.js
     healthCheckPath: /health
-    maxShutdownDelaySeconds: 30
     envVars:
       - key: NODE_ENV
         value: production
