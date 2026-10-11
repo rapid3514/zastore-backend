@@ -33,6 +33,11 @@ export type Category = Prisma.CategoryModel
  */
 export type BotAppearance = Prisma.BotAppearanceModel
 /**
+ * Model BotAppearanceChange
+ * 
+ */
+export type BotAppearanceChange = Prisma.BotAppearanceChangeModel
+/**
  * Model Product
  * 
  */

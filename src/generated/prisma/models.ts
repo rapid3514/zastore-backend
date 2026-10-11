@@ -11,6 +11,7 @@
 export type * from './models/User.js'
 export type * from './models/Category.js'
 export type * from './models/BotAppearance.js'
+export type * from './models/BotAppearanceChange.js'
 export type * from './models/Product.js'
 export type * from './models/MediaAsset.js'
 export type * from './models/ProductMedia.js'

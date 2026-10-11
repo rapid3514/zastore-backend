@@ -67,6 +67,15 @@ model BotAppearance {
   @@index([backgroundFileId])
 }
 
+model BotAppearanceChange {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String   @db.Uuid
+  scope     String
+  changedAt DateTime @default(now())
+
+  @@index([actorId, changedAt])
+}
+
 model Product {
   id                       String                    @id @default(uuid()) @db.Uuid
   name                     String

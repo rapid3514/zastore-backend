@@ -17,7 +17,7 @@ describe('Bot appearance access and validation (e2e)', () => {
   let app: INestApplication;
   let jwt: JwtService;
   const users = { findById: vi.fn() };
-  const appearance = { findPublic: vi.fn(), findSuperAdmin: vi.fn(), update: vi.fn() };
+  const appearance = { findPublic: vi.fn(), findSuperAdmin: vi.fn(), getLimit: vi.fn(), update: vi.fn() };
   const image = { fileId: 'background-1', url: 'https://ik.imagekit.io/shop/products/background.webp' };
 
   beforeAll(async () => {
@@ -41,6 +41,7 @@ describe('Bot appearance access and validation (e2e)', () => {
     users.findById.mockResolvedValue({ role: 'ADMIN', isBlocked: false });
     appearance.findPublic.mockResolvedValue({ backgroundUrl: null, updatedAt: null });
     appearance.findSuperAdmin.mockResolvedValue({ backgroundUrl: image.url, updatedAt: null });
+    appearance.getLimit.mockResolvedValue({ maxChanges: 5, windowDays: 30, used: 0, remaining: 5, nextAvailableAt: null });
     appearance.update.mockResolvedValue({ backgroundUrl: image.url, updatedAt: new Date().toISOString() });
   });
 
@@ -51,6 +52,20 @@ describe('Bot appearance access and validation (e2e)', () => {
 
   it('allows everyone to read the public background', async () => {
     await request(app.getHttpServer()).get('/api/v1/appearance').expect(200, { backgroundUrl: null, updatedAt: null });
+  });
+
+  it.each(['ADMIN', 'SUPER_ADMIN'])('shows only the authenticated %s account quota', async (role) => {
+    users.findById.mockResolvedValue({ role, isBlocked: false });
+    await request(app.getHttpServer()).get('/api/v1/appearance/limits').set('Authorization', authorization(role))
+      .expect('Cache-Control', 'private, no-store')
+      .expect(200, { maxChanges: 5, windowDays: 30, used: 0, remaining: 5, nextAvailableAt: null });
+    expect(appearance.getLimit).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+  });
+
+  it('protects background change quotas from anonymous users and customers', async () => {
+    await request(app.getHttpServer()).get('/api/v1/appearance/limits').expect(401);
+    await request(app.getHttpServer()).get('/api/v1/appearance/limits').set('Authorization', authorization('CUSTOMER')).expect(403);
+    expect(appearance.getLimit).not.toHaveBeenCalled();
   });
   it('requires authentication for changes', async () => {
     await request(app.getHttpServer()).patch('/api/v1/appearance').send({ background: image }).expect(401);

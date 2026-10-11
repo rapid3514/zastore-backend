@@ -37,7 +37,8 @@ const order = (overrides: Record<string, unknown> = {}) => ({
   subtotal: new Prisma.Decimal('25.00'),
   total: new Prisma.Decimal('25.00'),
   phone: '+998901234567',
-  deliveryAddress: null,
+  deliveryAddress: 'Toshkent, Yunusobod',
+  btcPostBranchNumber: '12',
   latitude: null,
   longitude: null,
   note: null,
@@ -385,6 +386,38 @@ describe('OrdersService', () => {
         entityId: orderId,
       }),
     );
+  });
+
+  it.each([
+    { deliveryAddress: null },
+    { deliveryAddress: '  ' },
+    { btcPostBranchNumber: null },
+    { btcPostBranchNumber: '  ' },
+  ])('requires both delivery details for confirmation: %j', async (details) => {
+    repository.findById.mockResolvedValueOnce(order(details));
+    await expect(service.confirmOrder(orderId, userId)).rejects.toMatchObject({
+      response: { error: 'ORDER_DELIVERY_DETAILS_REQUIRED' },
+    });
+    expect(repository.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('saves normalized delivery details atomically with confirmation for an older incomplete order', async () => {
+    repository.findById.mockResolvedValueOnce(order({ deliveryAddress: null, btcPostBranchNumber: null }));
+    repository.findProductsForOrder.mockResolvedValue([product()]);
+    workHoursService.isOpenAt.mockResolvedValue(true);
+    repository.updateStatus.mockResolvedValueOnce(order({ status: OrderStatus.CONFIRMED }));
+    await service.confirmOrder(orderId, userId, { deliveryAddress: '  Toshkent   Yunusobod ', btcPostBranchNumber: ' 012 ' });
+    expect(repository.updateStatus).toHaveBeenCalledWith(orderId, OrderStatus.PENDING_CONFIRMATION, expect.objectContaining({
+      status: OrderStatus.CONFIRMED, deliveryAddress: 'Toshkent Yunusobod', btcPostBranchNumber: '012',
+    }));
+  });
+
+  it('cannot bypass required delivery details through the status endpoint', async () => {
+    repository.findById.mockResolvedValueOnce(order({ btcPostBranchNumber: null }));
+    await expect(service.updateOrderStatus(orderId, OrderStatus.CONFIRMED, userId)).rejects.toMatchObject({
+      response: { error: 'ORDER_DELIVERY_DETAILS_REQUIRED' },
+    });
+    expect(repository.updateStatus).not.toHaveBeenCalled();
   });
 
   it('allows ordering a product that arrives in 14 days', async () => {

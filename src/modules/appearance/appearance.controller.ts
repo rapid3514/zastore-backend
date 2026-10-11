@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Patch, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
@@ -29,6 +29,14 @@ export class AppearanceController {
   @Roles(UserRole.SUPER_ADMIN)
   findSuperAdmin() {
     return this.appearance.findSuperAdmin();
+  }
+
+  @Get('limits')
+  @Header('Cache-Control', 'private, no-store')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  getLimit(@CurrentUser() actor: AuthenticatedUser) {
+    return this.appearance.getLimit(actor.sub);
   }
 
   @Patch('super-admin')

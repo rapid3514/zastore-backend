@@ -132,6 +132,30 @@ describe('OrdersController (e2e)', () => {
     expect(ordersService.createOrder).toHaveBeenCalled();
   });
 
+  it.each([UserRole.ADMIN, UserRole.SUPER_ADMIN])('accepts delivery details when %s confirms an order', async (role) => {
+    usersService.findById.mockResolvedValue({ id: customerId, role, isBlocked: false });
+    ordersService.confirmOrder.mockResolvedValue({ id: orderId, status: 'CONFIRMED' });
+    await request(app.getHttpServer()).patch(`/api/v1/orders/${orderId}/confirm`)
+      .set('Authorization', `Bearer ${token(role)}`)
+      .send({ deliveryAddress: '  Toshkent   Yunusobod ', btcPostBranchNumber: ' 012 ' }).expect(200);
+    expect(ordersService.confirmOrder).toHaveBeenCalledWith(orderId, customerId, {
+      deliveryAddress: 'Toshkent Yunusobod', btcPostBranchNumber: '012',
+    });
+  });
+
+  it.each([
+    { deliveryAddress: ' ', btcPostBranchNumber: '12' },
+    { deliveryAddress: 'Address', btcPostBranchNumber: ' ' },
+    { deliveryAddress: null, btcPostBranchNumber: '12' },
+    { deliveryAddress: 'a'.repeat(256), btcPostBranchNumber: '12' },
+    { deliveryAddress: 'Address', btcPostBranchNumber: 'a'.repeat(51) },
+  ])('rejects invalid confirmation details before the service: %j', async (details) => {
+    usersService.findById.mockResolvedValue({ id: customerId, role: UserRole.ADMIN, isBlocked: false });
+    await request(app.getHttpServer()).patch(`/api/v1/orders/${orderId}/confirm`)
+      .set('Authorization', `Bearer ${token(UserRole.ADMIN)}`).send(details).expect(400);
+    expect(ordersService.confirmOrder).not.toHaveBeenCalled();
+  });
+
   it('requires a valid checkout Idempotency-Key UUID header', async () => {
     await request(app.getHttpServer())
       .post('/api/v1/orders')

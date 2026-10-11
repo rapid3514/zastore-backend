@@ -54,6 +54,7 @@ export const ModelName = {
   User: 'User',
   Category: 'Category',
   BotAppearance: 'BotAppearance',
+  BotAppearanceChange: 'BotAppearanceChange',
   Product: 'Product',
   MediaAsset: 'MediaAsset',
   ProductMedia: 'ProductMedia',
@@ -126,6 +127,16 @@ export const BotAppearanceScalarFieldEnum = {
 } as const
 
 export type BotAppearanceScalarFieldEnum = (typeof BotAppearanceScalarFieldEnum)[keyof typeof BotAppearanceScalarFieldEnum]
+
+
+export const BotAppearanceChangeScalarFieldEnum = {
+  id: 'id',
+  actorId: 'actorId',
+  scope: 'scope',
+  changedAt: 'changedAt'
+} as const
+
+export type BotAppearanceChangeScalarFieldEnum = (typeof BotAppearanceChangeScalarFieldEnum)[keyof typeof BotAppearanceChangeScalarFieldEnum]
 
 
 export const ProductScalarFieldEnum = {

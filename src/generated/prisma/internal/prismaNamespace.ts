@@ -400,6 +400,7 @@ export const ModelName = {
   User: 'User',
   Category: 'Category',
   BotAppearance: 'BotAppearance',
+  BotAppearanceChange: 'BotAppearanceChange',
   Product: 'Product',
   MediaAsset: 'MediaAsset',
   ProductMedia: 'ProductMedia',
@@ -426,7 +427,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "category" | "botAppearance" | "product" | "mediaAsset" | "productMedia" | "productTelegramMessage" | "order" | "notificationOutbox" | "payment" | "auditLog" | "orderItem" | "workHour" | "refreshSession"
+    modelProps: "user" | "category" | "botAppearance" | "botAppearanceChange" | "product" | "mediaAsset" | "productMedia" | "productTelegramMessage" | "order" | "notificationOutbox" | "payment" | "auditLog" | "orderItem" | "workHour" | "refreshSession"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -649,6 +650,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.BotAppearanceCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.BotAppearanceCountAggregateOutputType> | number
+        }
+      }
+    }
+    BotAppearanceChange: {
+      payload: Prisma.$BotAppearanceChangePayload<ExtArgs>
+      fields: Prisma.BotAppearanceChangeFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.BotAppearanceChangeFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.BotAppearanceChangeFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload>
+        }
+        findFirst: {
+          args: Prisma.BotAppearanceChangeFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.BotAppearanceChangeFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload>
+        }
+        findMany: {
+          args: Prisma.BotAppearanceChangeFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload>[]
+        }
+        create: {
+          args: Prisma.BotAppearanceChangeCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload>
+        }
+        createMany: {
+          args: Prisma.BotAppearanceChangeCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.BotAppearanceChangeCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload>[]
+        }
+        delete: {
+          args: Prisma.BotAppearanceChangeDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload>
+        }
+        update: {
+          args: Prisma.BotAppearanceChangeUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload>
+        }
+        deleteMany: {
+          args: Prisma.BotAppearanceChangeDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.BotAppearanceChangeUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.BotAppearanceChangeUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload>[]
+        }
+        upsert: {
+          args: Prisma.BotAppearanceChangeUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearanceChangePayload>
+        }
+        aggregate: {
+          args: Prisma.BotAppearanceChangeAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateBotAppearanceChange>
+        }
+        groupBy: {
+          args: Prisma.BotAppearanceChangeGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.BotAppearanceChangeGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.BotAppearanceChangeCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.BotAppearanceChangeCountAggregateOutputType> | number
         }
       }
     }
@@ -1550,6 +1625,16 @@ export const BotAppearanceScalarFieldEnum = {
 export type BotAppearanceScalarFieldEnum = (typeof BotAppearanceScalarFieldEnum)[keyof typeof BotAppearanceScalarFieldEnum]
 
 
+export const BotAppearanceChangeScalarFieldEnum = {
+  id: 'id',
+  actorId: 'actorId',
+  scope: 'scope',
+  changedAt: 'changedAt'
+} as const
+
+export type BotAppearanceChangeScalarFieldEnum = (typeof BotAppearanceChangeScalarFieldEnum)[keyof typeof BotAppearanceChangeScalarFieldEnum]
+
+
 export const ProductScalarFieldEnum = {
   id: 'id',
   name: 'name',
@@ -2206,6 +2291,7 @@ export type GlobalOmitConfig = {
   user?: Prisma.UserOmit
   category?: Prisma.CategoryOmit
   botAppearance?: Prisma.BotAppearanceOmit
+  botAppearanceChange?: Prisma.BotAppearanceChangeOmit
   product?: Prisma.ProductOmit
   mediaAsset?: Prisma.MediaAssetOmit
   productMedia?: Prisma.ProductMediaOmit

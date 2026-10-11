@@ -96,6 +96,19 @@ read or change that background. Super admins cannot PATCH the store endpoint.
 The same request and response shape applies to both scopes, and resetting one
 scope does not change the other or fall back to its image.
 
+The `20261011020000_background_change_limit` migration adds a change history
+table. Each account can make five successful background changes in a rolling
+30-day window, including restoring the default. No-ops and failures do not count.
+The history insert and background update share a transaction and a per-account
+advisory lock. `GET /api/v1/appearance/limits` returns the current account's quota
+and `nextAvailableAt`; a sixth change returns 429 with `BACKGROUND_CHANGE_LIMIT`.
+
+`PATCH /api/v1/orders/:id/confirm` accepts `deliveryAddress` (1–255 characters)
+and `btcPostBranchNumber` (1–50 characters). They are normalized and saved in
+the same transaction as confirmation. If omitted, both must already exist on
+the order. Missing or whitespace-only details return 400, including when
+confirmation is requested through the generic status endpoint.
+
 ```sh
 docker compose --env-file .env.production restart backend caddy
 docker compose --env-file .env.production logs --tail=200 backend caddy postgres redis
