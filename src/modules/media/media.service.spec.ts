@@ -17,6 +17,7 @@ describe('MediaService', () => {
   const prisma = {
     product: { count: vi.fn() },
     productMedia: { count: vi.fn() },
+    botAppearance: { count: vi.fn() },
     mediaAsset: {
       findMany: vi.fn(),
       createMany: vi.fn(),
@@ -76,6 +77,7 @@ describe('MediaService', () => {
     });
     prisma.product.count.mockResolvedValue(0);
     prisma.productMedia.count.mockResolvedValue(0);
+    prisma.botAppearance.count.mockResolvedValue(0);
     prisma.mediaAsset.findMany.mockResolvedValue([]);
     prisma.mediaAsset.createMany.mockResolvedValue({ count: 1 });
     prisma.mediaAsset.upsert.mockResolvedValue({ status: MediaAssetStatus.ACTIVE });
@@ -351,6 +353,12 @@ describe('MediaService', () => {
     await expect(
       service.deleteUnassignedImage('file-1'),
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(imageKit.deleteFile).not.toHaveBeenCalled();
+  });
+
+  it('does not delete the saved bot background', async () => {
+    prisma.botAppearance.count.mockResolvedValue(1);
+    await expect(service.deleteUnassignedImage('file-1')).rejects.toBeInstanceOf(ConflictException);
     expect(imageKit.deleteFile).not.toHaveBeenCalled();
   });
 

@@ -325,14 +325,15 @@ export class MediaService {
   }
 
   private async countReferences(
-    database: Pick<Prisma.TransactionClient, 'product' | 'productMedia'>,
+    database: Pick<Prisma.TransactionClient, 'product' | 'productMedia' | 'botAppearance'>,
     fileId: string,
   ): Promise<number> {
-    const [legacyReferences, mediaReferences] = await Promise.all([
+    const [legacyReferences, mediaReferences, backgroundReferences] = await Promise.all([
       database.product.count({ where: { imageFileId: fileId } }),
       database.productMedia.count({ where: { fileId } }),
+      database.botAppearance.count({ where: { backgroundFileId: fileId } }),
     ]);
-    return legacyReferences + mediaReferences;
+    return legacyReferences + mediaReferences + backgroundReferences;
   }
 
   private isInsideProductFolder(filePath: string): boolean {

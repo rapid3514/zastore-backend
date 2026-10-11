@@ -57,6 +57,16 @@ model Category {
   @@index([isActive, sortOrder])
 }
 
+model BotAppearance {
+  id               String   @id @default("bot")
+  backgroundFileId String?
+  backgroundUrl    String?
+  updatedById      String?  @db.Uuid
+  updatedAt        DateTime @updatedAt
+
+  @@index([backgroundFileId])
+}
+
 model Product {
   id                       String                    @id @default(uuid()) @db.Uuid
   name                     String

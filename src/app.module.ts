@@ -23,6 +23,7 @@ import { HealthModule } from './modules/health/health.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
 import { MediaModule } from './modules/media/media.module.js';
+import { AppearanceModule } from './modules/appearance/appearance.module.js';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { MediaModule } from './modules/media/media.module.js';
     NotificationsModule,
     PaymentsModule,
     MediaModule,
+    AppearanceModule,
     AuditModule,
     HealthModule,
   ],

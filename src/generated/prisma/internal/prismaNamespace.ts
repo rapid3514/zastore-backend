@@ -399,6 +399,7 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 export const ModelName = {
   User: 'User',
   Category: 'Category',
+  BotAppearance: 'BotAppearance',
   Product: 'Product',
   MediaAsset: 'MediaAsset',
   ProductMedia: 'ProductMedia',
@@ -425,7 +426,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "category" | "product" | "mediaAsset" | "productMedia" | "productTelegramMessage" | "order" | "notificationOutbox" | "payment" | "auditLog" | "orderItem" | "workHour" | "refreshSession"
+    modelProps: "user" | "category" | "botAppearance" | "product" | "mediaAsset" | "productMedia" | "productTelegramMessage" | "order" | "notificationOutbox" | "payment" | "auditLog" | "orderItem" | "workHour" | "refreshSession"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -574,6 +575,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.CategoryCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.CategoryCountAggregateOutputType> | number
+        }
+      }
+    }
+    BotAppearance: {
+      payload: Prisma.$BotAppearancePayload<ExtArgs>
+      fields: Prisma.BotAppearanceFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.BotAppearanceFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.BotAppearanceFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload>
+        }
+        findFirst: {
+          args: Prisma.BotAppearanceFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.BotAppearanceFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload>
+        }
+        findMany: {
+          args: Prisma.BotAppearanceFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload>[]
+        }
+        create: {
+          args: Prisma.BotAppearanceCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload>
+        }
+        createMany: {
+          args: Prisma.BotAppearanceCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.BotAppearanceCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload>[]
+        }
+        delete: {
+          args: Prisma.BotAppearanceDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload>
+        }
+        update: {
+          args: Prisma.BotAppearanceUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload>
+        }
+        deleteMany: {
+          args: Prisma.BotAppearanceDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.BotAppearanceUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.BotAppearanceUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload>[]
+        }
+        upsert: {
+          args: Prisma.BotAppearanceUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BotAppearancePayload>
+        }
+        aggregate: {
+          args: Prisma.BotAppearanceAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateBotAppearance>
+        }
+        groupBy: {
+          args: Prisma.BotAppearanceGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.BotAppearanceGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.BotAppearanceCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.BotAppearanceCountAggregateOutputType> | number
         }
       }
     }
@@ -1464,6 +1539,17 @@ export const CategoryScalarFieldEnum = {
 export type CategoryScalarFieldEnum = (typeof CategoryScalarFieldEnum)[keyof typeof CategoryScalarFieldEnum]
 
 
+export const BotAppearanceScalarFieldEnum = {
+  id: 'id',
+  backgroundFileId: 'backgroundFileId',
+  backgroundUrl: 'backgroundUrl',
+  updatedById: 'updatedById',
+  updatedAt: 'updatedAt'
+} as const
+
+export type BotAppearanceScalarFieldEnum = (typeof BotAppearanceScalarFieldEnum)[keyof typeof BotAppearanceScalarFieldEnum]
+
+
 export const ProductScalarFieldEnum = {
   id: 'id',
   name: 'name',
@@ -2119,6 +2205,7 @@ export type PrismaClientOptions = PrismaClientOptionsWithAccelerateUrl | PrismaC
 export type GlobalOmitConfig = {
   user?: Prisma.UserOmit
   category?: Prisma.CategoryOmit
+  botAppearance?: Prisma.BotAppearanceOmit
   product?: Prisma.ProductOmit
   mediaAsset?: Prisma.MediaAssetOmit
   productMedia?: Prisma.ProductMediaOmit

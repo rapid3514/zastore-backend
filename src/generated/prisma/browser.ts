@@ -28,6 +28,11 @@ export type User = Prisma.UserModel
  */
 export type Category = Prisma.CategoryModel
 /**
+ * Model BotAppearance
+ * 
+ */
+export type BotAppearance = Prisma.BotAppearanceModel
+/**
  * Model Product
  * 
  */

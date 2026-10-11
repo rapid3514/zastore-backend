@@ -53,6 +53,7 @@ export const AnyNull = runtime.AnyNull
 export const ModelName = {
   User: 'User',
   Category: 'Category',
+  BotAppearance: 'BotAppearance',
   Product: 'Product',
   MediaAsset: 'MediaAsset',
   ProductMedia: 'ProductMedia',
@@ -114,6 +115,17 @@ export const CategoryScalarFieldEnum = {
 } as const
 
 export type CategoryScalarFieldEnum = (typeof CategoryScalarFieldEnum)[keyof typeof CategoryScalarFieldEnum]
+
+
+export const BotAppearanceScalarFieldEnum = {
+  id: 'id',
+  backgroundFileId: 'backgroundFileId',
+  backgroundUrl: 'backgroundUrl',
+  updatedById: 'updatedById',
+  updatedAt: 'updatedAt'
+} as const
+
+export type BotAppearanceScalarFieldEnum = (typeof BotAppearanceScalarFieldEnum)[keyof typeof BotAppearanceScalarFieldEnum]
 
 
 export const ProductScalarFieldEnum = {
