@@ -19,8 +19,22 @@ export class AppearanceController {
 
   @Patch()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN)
   update(@Body() input: UpdateAppearanceDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.appearance.update(input, actor.sub);
+  }
+
+  @Get('super-admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  findSuperAdmin() {
+    return this.appearance.findSuperAdmin();
+  }
+
+  @Patch('super-admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  updateSuperAdmin(@Body() input: UpdateAppearanceDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.appearance.update(input, actor.sub, 'super-admin');
   }
 }

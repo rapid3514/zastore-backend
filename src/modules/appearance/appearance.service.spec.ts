@@ -77,4 +77,22 @@ describe('AppearanceService', () => {
     await expect(service.update({ background: { fileId: 'new-background', url: current.backgroundUrl } }, 'admin-id')).rejects.toThrow('Database failure');
     expect(media.deleteImageIfUnreferenced).not.toHaveBeenCalled();
   });
+
+  it('reads only the super admin background without falling back to the store background', async () => {
+    prisma.botAppearance.findUnique.mockResolvedValueOnce(null);
+    expect(await service.findSuperAdmin()).toEqual({ backgroundUrl: null, updatedAt: null });
+    expect(prisma.botAppearance.findUnique).toHaveBeenCalledWith({
+      where: { id: 'super-admin' }, select: { backgroundUrl: true, updatedAt: true },
+    });
+  });
+
+  it.each([false, true])('saves or resets only the super admin row (reset: %s)', async (reset) => {
+    const input = { background: reset ? null : { fileId: 'new-background', url: current.backgroundUrl } };
+    await service.update(input, 'super-admin-id', 'super-admin');
+    expect(prisma.botAppearance.findUnique).toHaveBeenCalledWith({ where: { id: 'super-admin' } });
+    expect(prisma.botAppearance.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'super-admin' },
+      create: expect.objectContaining({ id: 'super-admin', updatedById: 'super-admin-id' }),
+    }));
+  });
 });

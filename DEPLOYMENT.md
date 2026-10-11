@@ -82,12 +82,19 @@ the backup and legacy rows on the target server instead of weakening the guard.
 The `20261011000000_bot_appearance` migration creates the singleton background
 setting without modifying existing tables or rows. `GET /api/v1/appearance`
 returns the public `backgroundUrl` and `updatedAt` (both null before the first
-save). Admins and super admins can `PATCH /api/v1/appearance` with
+save). Admins can `PATCH /api/v1/appearance` with
 `{"background":{"fileId":"IMAGEKIT_FILE_ID","url":"https://ik.imagekit.io/..."}}`.
 The server verifies the ImageKit file and uses its authoritative URL. Send
 `{"background":null}` to restore the default. Saved backgrounds are protected
 from unassigned media cleanup; replacing or resetting the background cleans up
 the previous file only when no feature references it.
+
+The `20261011010000_separate_super_admin_appearance` migration preserves the
+existing `bot` row and permits an independent `super-admin` row. Only super
+admins can GET/PATCH `/api/v1/appearance/super-admin`; regular admins cannot
+read or change that background. Super admins cannot PATCH the store endpoint.
+The same request and response shape applies to both scopes, and resetting one
+scope does not change the other or fall back to its image.
 
 ```sh
 docker compose --env-file .env.production restart backend caddy
