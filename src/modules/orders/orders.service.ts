@@ -556,6 +556,7 @@ export class OrdersService {
       id: string;
       productId: string | null;
       productName: string;
+      product?: { imageUrl: string | null; media: Array<{ url: string }> } | null;
       unitPrice: Prisma.Decimal | string | number;
       quantity: number;
       lineTotal: Prisma.Decimal | string | number;
@@ -591,6 +592,7 @@ export class OrdersService {
         id: item.id,
         productId: item.productId,
         productName: item.productName,
+        imageUrl: item.product?.media[0]?.url ?? item.product?.imageUrl ?? null,
         unitPrice: new Prisma.Decimal(item.unitPrice.toString()).toFixed(2),
         quantity: item.quantity,
         lineTotal: new Prisma.Decimal(item.lineTotal.toString()).toFixed(2),

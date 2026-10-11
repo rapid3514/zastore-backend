@@ -27,6 +27,19 @@ const orderInclude = {
   },
   items: {
     orderBy: { createdAt: 'asc' },
+    include: {
+      product: {
+        select: {
+          imageUrl: true,
+          media: {
+            where: { type: 'IMAGE' },
+            orderBy: { position: 'asc' },
+            take: 1,
+            select: { url: true },
+          },
+        },
+      },
+    },
   },
 } as const;
 

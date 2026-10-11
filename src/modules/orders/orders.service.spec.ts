@@ -484,6 +484,21 @@ describe('OrdersService', () => {
     expect(repository.findManageOrders).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [{ imageUrl: 'https://images.example/legacy.jpg', media: [{ url: 'https://images.example/first.jpg' }] }, 'https://images.example/first.jpg'],
+    [{ imageUrl: 'https://images.example/legacy.jpg', media: [] }, 'https://images.example/legacy.jpg'],
+    [{ imageUrl: null, media: [] }, null],
+    [null, null],
+  ])('includes the product thumbnail with a fallback for missing or deleted products', async (product, imageUrl) => {
+    const fixture = order();
+    repository.findManageOrders.mockResolvedValueOnce({
+      data: [{ ...fixture, items: fixture.items.map((item) => ({ ...item, product })) }],
+      total: 1,
+    });
+    const response = await service.getManageOrders({});
+    expect(response.data[0].items[0]).toMatchObject({ productName: 'Burger', imageUrl });
+  });
+
   it('scopes customer detail lookup to the authenticated owner', async () => {
     repository.findUserOrderById.mockResolvedValueOnce(order());
     await expect(
