@@ -50,7 +50,7 @@ describe('product Telegram caption', () => {
     });
 
     expect(caption).toContain('🚚 14 kunda keladi');
-    expect(caption).toContain('🚚 Kargo: 5 000.5 so‘m');
+    expect(caption).toContain('🚚 Kargo: 5 000.5 so‘m / 100gr');
   });
 
   it('escapes script and Telegram HTML tags from user-controlled fields', () => {

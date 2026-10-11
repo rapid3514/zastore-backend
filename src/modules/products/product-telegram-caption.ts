@@ -25,7 +25,7 @@ export function buildProductTelegramCaption(
       ProductAvailabilityStatus.ARRIVING_IN_14_DAYS &&
     product.cargoPrice != null
   ) {
-    header.push(`🚚 Kargo: ${formatPrice(product.cargoPrice)} so‘m`);
+    header.push(`🚚 Kargo: ${formatPrice(product.cargoPrice)} so‘m / 100gr`);
   }
   const availability = {
     [ProductAvailabilityStatus.IN_STOCK]: '✅ Sotuvda bor',
