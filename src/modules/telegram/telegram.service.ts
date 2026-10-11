@@ -99,6 +99,29 @@ export class TelegramService {
     }
   }
 
+  async setWebhook(): Promise<void> {
+    const { botToken, webhookSecret, webhookUrl } = getConfiguration(this.configService).telegram;
+    if (!botToken || !webhookSecret || !webhookUrl) return;
+
+    try {
+      const { statusCode, payload } = await postTelegram<unknown>(
+        botToken,
+        'setWebhook',
+        {
+          url: webhookUrl,
+          secret_token: webhookSecret,
+          allowed_updates: ['message'],
+          drop_pending_updates: false,
+        },
+      );
+      if (statusCode < 200 || statusCode >= 300 || !payload.ok) {
+        this.logger.error('Telegram webhook could not be registered');
+      }
+    } catch {
+      this.logger.error('Telegram webhook could not be registered');
+    }
+  }
+
   async sendNewOrderNotification(
     chatId: string,
     order: {

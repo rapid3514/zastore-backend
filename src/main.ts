@@ -12,7 +12,8 @@ async function bootstrap() {
   app.useLogger(new RedactingLogger(config));
   configureHttpSecurity(app, config);
   app.enableShutdownHooks();
-  await app.get(TelegramService).setMyCommands();
+  const telegram = app.get(TelegramService);
+  await Promise.all([telegram.setMyCommands(), telegram.setWebhook()]);
   await app.listen(config.app.port);
 }
 await bootstrap();

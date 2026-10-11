@@ -172,6 +172,21 @@ describe('TelegramService', () => {
     );
   });
 
+  it('registers the configured HTTPS webhook with Telegram', async () => {
+    await service.setWebhook();
+
+    expect(postTelegramMock).toHaveBeenCalledWith(
+      'test-token',
+      'setWebhook',
+      expect.objectContaining({
+        url: 'https://backend.example/api/v1/telegram/webhook',
+        secret_token: 'test-webhook-secret',
+        allowed_updates: ['message'],
+        drop_pending_updates: false,
+      }),
+    );
+  });
+
   it.each([
     ['GUEST without phone', UserRole.GUEST, null, null],
     ['CUSTOMER without phone', UserRole.CUSTOMER, null, null],
