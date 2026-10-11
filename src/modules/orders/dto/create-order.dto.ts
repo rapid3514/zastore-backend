@@ -10,6 +10,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { CreateOrderItemDto } from './create-order-item.dto.js';
@@ -33,17 +34,17 @@ export class CreateOrderDto {
   @MaxLength(30)
   phone?: string;
 
-  @IsOptional()
   @Transform(normalizeText)
   @IsString()
+  @MinLength(1, { message: 'Yetkazib berish manzilini kiriting.' })
   @MaxLength(255)
-  deliveryAddress?: string;
+  deliveryAddress!: string;
 
-  @IsOptional()
   @Transform(normalizeText)
   @IsString()
+  @MinLength(1, { message: 'BTC pochta filial raqamini kiriting.' })
   @MaxLength(50)
-  btcPostBranchNumber?: string;
+  btcPostBranchNumber!: string;
 
   @IsOptional()
   @Type(() => Number)

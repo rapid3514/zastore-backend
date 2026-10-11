@@ -12,6 +12,10 @@ const orderId = '22222222-2222-4222-8222-222222222222';
 const productId = '33333333-3333-4333-8333-333333333333';
 const secondProductId = '55555555-5555-4555-8555-555555555555';
 const idempotencyKey = '66666666-6666-4666-8666-666666666666';
+const delivery = {
+  deliveryAddress: 'Toshkent, Chilonzor',
+  btcPostBranchNumber: '012',
+};
 
 const order = (overrides: Record<string, unknown> = {}) => ({
   id: orderId,
@@ -37,8 +41,7 @@ const order = (overrides: Record<string, unknown> = {}) => ({
   subtotal: new Prisma.Decimal('25.00'),
   total: new Prisma.Decimal('25.00'),
   phone: '+998901234567',
-  deliveryAddress: 'Toshkent, Yunusobod',
-  btcPostBranchNumber: '12',
+  deliveryAddress: null,
   latitude: null,
   longitude: null,
   note: null,
@@ -112,7 +115,7 @@ describe('OrdersService', () => {
       await expect(
         service.createOrder(
           { sub: userId },
-          { items: [{ productId, quantity }] },
+          { ...delivery, items: [{ productId, quantity }] },
           idempotencyKey,
         ),
       ).rejects.toMatchObject({ status: 400 });
@@ -127,6 +130,7 @@ describe('OrdersService', () => {
       service.createOrder(
         { sub: userId },
         {
+          ...delivery,
           items: [
             { productId, quantity: 600 },
             { productId, quantity: 600 },
@@ -139,6 +143,7 @@ describe('OrdersService', () => {
       service.createOrder(
         { sub: userId },
         {
+          ...delivery,
           items: Array.from({ length: 101 }, () => ({
             productId,
             quantity: 1,
@@ -157,7 +162,7 @@ describe('OrdersService', () => {
     await expect(
       service.createOrder(
         { sub: userId },
-        { items: [{ productId, quantity: 2 }] },
+        { ...delivery, items: [{ productId, quantity: 2 }] },
         idempotencyKey,
       ),
     ).rejects.toMatchObject({
@@ -174,7 +179,7 @@ describe('OrdersService', () => {
       new Date('2099-01-01'),
     );
     repository.createOrder.mockResolvedValue(order());
-    const dto = { items: [{ productId, quantity: 1 }] };
+    const dto = { ...delivery, items: [{ productId, quantity: 1 }] };
     await service.createOrder({ sub: userId }, dto, idempotencyKey);
     const requestHash = repository.createOrder.mock.calls[0][0]
       .requestHash as string;
@@ -189,7 +194,7 @@ describe('OrdersService', () => {
     await expect(
       service.createOrder(
         { sub: userId },
-        { items: [{ productId, quantity: 2 }] },
+        { ...delivery, items: [{ productId, quantity: 2 }] },
         idempotencyKey,
       ),
     ).rejects.toMatchObject({ status: 409 });
@@ -223,6 +228,7 @@ describe('OrdersService', () => {
     await service.createOrder(
       { sub: userId },
       {
+        ...delivery,
         items: [
           { productId, quantity: 1 },
           { productId, quantity: 2 },
@@ -268,7 +274,7 @@ describe('OrdersService', () => {
     await expect(
       service.createOrder(
         { sub: userId },
-        { items: [{ productId, quantity: 2 }] },
+        { ...delivery, items: [{ productId, quantity: 2 }] },
         idempotencyKey,
       ),
     ).resolves.toMatchObject({ id: orderId });
@@ -302,6 +308,7 @@ describe('OrdersService', () => {
     const response = await service.createOrder(
       { sub: userId },
       {
+        ...delivery,
         items: [
           { productId, quantity: 2 },
           { productId: secondProductId, quantity: 3 },
@@ -388,38 +395,6 @@ describe('OrdersService', () => {
     );
   });
 
-  it.each([
-    { deliveryAddress: null },
-    { deliveryAddress: '  ' },
-    { btcPostBranchNumber: null },
-    { btcPostBranchNumber: '  ' },
-  ])('requires both delivery details for confirmation: %j', async (details) => {
-    repository.findById.mockResolvedValueOnce(order(details));
-    await expect(service.confirmOrder(orderId, userId)).rejects.toMatchObject({
-      response: { error: 'ORDER_DELIVERY_DETAILS_REQUIRED' },
-    });
-    expect(repository.updateStatus).not.toHaveBeenCalled();
-  });
-
-  it('saves normalized delivery details atomically with confirmation for an older incomplete order', async () => {
-    repository.findById.mockResolvedValueOnce(order({ deliveryAddress: null, btcPostBranchNumber: null }));
-    repository.findProductsForOrder.mockResolvedValue([product()]);
-    workHoursService.isOpenAt.mockResolvedValue(true);
-    repository.updateStatus.mockResolvedValueOnce(order({ status: OrderStatus.CONFIRMED }));
-    await service.confirmOrder(orderId, userId, { deliveryAddress: '  Toshkent   Yunusobod ', btcPostBranchNumber: ' 012 ' });
-    expect(repository.updateStatus).toHaveBeenCalledWith(orderId, OrderStatus.PENDING_CONFIRMATION, expect.objectContaining({
-      status: OrderStatus.CONFIRMED, deliveryAddress: 'Toshkent Yunusobod', btcPostBranchNumber: '012',
-    }));
-  });
-
-  it('cannot bypass required delivery details through the status endpoint', async () => {
-    repository.findById.mockResolvedValueOnce(order({ btcPostBranchNumber: null }));
-    await expect(service.updateOrderStatus(orderId, OrderStatus.CONFIRMED, userId)).rejects.toMatchObject({
-      response: { error: 'ORDER_DELIVERY_DETAILS_REQUIRED' },
-    });
-    expect(repository.updateStatus).not.toHaveBeenCalled();
-  });
-
   it('allows ordering a product that arrives in 14 days', async () => {
     usersService.findById.mockResolvedValue({
       id: userId,
@@ -439,7 +414,7 @@ describe('OrdersService', () => {
     await expect(
       service.createOrder(
         { sub: userId },
-        { items: [{ productId, quantity: 1 }] },
+        { ...delivery, items: [{ productId, quantity: 1 }] },
         idempotencyKey,
       ),
     ).resolves.toMatchObject({ id: orderId });
@@ -518,19 +493,39 @@ describe('OrdersService', () => {
   });
 
   it.each([
-    [{ imageUrl: 'https://images.example/legacy.jpg', media: [{ url: 'https://images.example/first.jpg' }] }, 'https://images.example/first.jpg'],
-    [{ imageUrl: 'https://images.example/legacy.jpg', media: [] }, 'https://images.example/legacy.jpg'],
+    [
+      {
+        imageUrl: 'https://images.example/legacy.jpg',
+        media: [{ url: 'https://images.example/first.jpg' }],
+      },
+      'https://images.example/first.jpg',
+    ],
+    [
+      { imageUrl: 'https://images.example/legacy.jpg', media: [] },
+      'https://images.example/legacy.jpg',
+    ],
     [{ imageUrl: null, media: [] }, null],
     [null, null],
-  ])('includes the product thumbnail with a fallback for missing or deleted products', async (product, imageUrl) => {
-    const fixture = order();
-    repository.findManageOrders.mockResolvedValueOnce({
-      data: [{ ...fixture, items: fixture.items.map((item) => ({ ...item, product })) }],
-      total: 1,
-    });
-    const response = await service.getManageOrders({});
-    expect(response.data[0].items[0]).toMatchObject({ productName: 'Burger', imageUrl });
-  });
+  ])(
+    'includes the product thumbnail with a fallback for missing or deleted products',
+    async (product, imageUrl) => {
+      const fixture = order();
+      repository.findManageOrders.mockResolvedValueOnce({
+        data: [
+          {
+            ...fixture,
+            items: fixture.items.map((item) => ({ ...item, product })),
+          },
+        ],
+        total: 1,
+      });
+      const response = await service.getManageOrders({});
+      expect(response.data[0].items[0]).toMatchObject({
+        productName: 'Burger',
+        imageUrl,
+      });
+    },
+  );
 
   it('scopes customer detail lookup to the authenticated owner', async () => {
     repository.findUserOrderById.mockResolvedValueOnce(order());

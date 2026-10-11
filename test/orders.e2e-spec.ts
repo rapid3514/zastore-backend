@@ -26,6 +26,7 @@ const secret = 'test-access-secret-with-at-least-32-characters';
 const customerId = '11111111-1111-4111-8111-111111111111';
 const productId = '22222222-2222-4222-8222-222222222222';
 const orderId = '33333333-3333-4333-8333-333333333333';
+const delivery = { deliveryAddress: 'Address', btcPostBranchNumber: '012' };
 
 describe('OrdersController (e2e)', () => {
   let app: INestApplication;
@@ -110,6 +111,7 @@ describe('OrdersController (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/v1/orders')
       .send({
+        ...delivery,
         items: [{ productId, quantity: 1 }],
         phone: '+998901234567',
         deliveryAddress: 'Address',
@@ -123,6 +125,7 @@ describe('OrdersController (e2e)', () => {
       .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
       .set('Idempotency-Key', '66666666-6666-4666-8666-666666666666')
       .send({
+        ...delivery,
         items: [{ productId, quantity: 2 }],
         phone: '+998901234567',
         deliveryAddress: 'Address',
@@ -132,43 +135,64 @@ describe('OrdersController (e2e)', () => {
     expect(ordersService.createOrder).toHaveBeenCalled();
   });
 
-  it.each([UserRole.ADMIN, UserRole.SUPER_ADMIN])('accepts delivery details when %s confirms an order', async (role) => {
-    usersService.findById.mockResolvedValue({ id: customerId, role, isBlocked: false });
-    ordersService.confirmOrder.mockResolvedValue({ id: orderId, status: 'CONFIRMED' });
-    await request(app.getHttpServer()).patch(`/api/v1/orders/${orderId}/confirm`)
-      .set('Authorization', `Bearer ${token(role)}`)
-      .send({ deliveryAddress: '  Toshkent   Yunusobod ', btcPostBranchNumber: ' 012 ' }).expect(200);
-    expect(ordersService.confirmOrder).toHaveBeenCalledWith(orderId, customerId, {
-      deliveryAddress: 'Toshkent Yunusobod', btcPostBranchNumber: '012',
-    });
-  });
-
-  it.each([
-    { deliveryAddress: ' ', btcPostBranchNumber: '12' },
-    { deliveryAddress: 'Address', btcPostBranchNumber: ' ' },
-    { deliveryAddress: null, btcPostBranchNumber: '12' },
-    { deliveryAddress: 'a'.repeat(256), btcPostBranchNumber: '12' },
-    { deliveryAddress: 'Address', btcPostBranchNumber: 'a'.repeat(51) },
-  ])('rejects invalid confirmation details before the service: %j', async (details) => {
-    usersService.findById.mockResolvedValue({ id: customerId, role: UserRole.ADMIN, isBlocked: false });
-    await request(app.getHttpServer()).patch(`/api/v1/orders/${orderId}/confirm`)
-      .set('Authorization', `Bearer ${token(UserRole.ADMIN)}`).send(details).expect(400);
-    expect(ordersService.confirmOrder).not.toHaveBeenCalled();
-  });
-
   it('requires a valid checkout Idempotency-Key UUID header', async () => {
     await request(app.getHttpServer())
       .post('/api/v1/orders')
       .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
-      .send({ items: [{ productId, quantity: 1 }] })
+      .send({ ...delivery, items: [{ productId, quantity: 1 }] })
       .expect(400);
     await request(app.getHttpServer())
       .post('/api/v1/orders')
       .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
       .set('Idempotency-Key', 'invalid')
-      .send({ items: [{ productId, quantity: 1 }] })
+      .send({ ...delivery, items: [{ productId, quantity: 1 }] })
       .expect(400);
     expect(ordersService.createOrder).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { deliveryAddress: undefined },
+    { deliveryAddress: null },
+    { deliveryAddress: ' \t\n ' },
+    { deliveryAddress: 123 },
+    { deliveryAddress: 'a'.repeat(256) },
+    { btcPostBranchNumber: undefined },
+    { btcPostBranchNumber: null },
+    { btcPostBranchNumber: ' \t\n ' },
+    { btcPostBranchNumber: 123 },
+    { btcPostBranchNumber: 'a'.repeat(51) },
+  ])(
+    'requires valid delivery details at customer submission: %j',
+    async (invalid) => {
+      await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
+        .set('Idempotency-Key', '66666666-6666-4666-8666-666666666666')
+        .send({ items: [{ productId, quantity: 1 }], ...delivery, ...invalid })
+        .expect(400);
+      expect(ordersService.createOrder).not.toHaveBeenCalled();
+    },
+  );
+
+  it('normalizes delivery details and preserves postal branch leading zeros', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
+      .set('Idempotency-Key', '66666666-6666-4666-8666-666666666666')
+      .send({
+        items: [{ productId, quantity: 1 }],
+        deliveryAddress: '  Toshkent,   Chilonzor  ',
+        btcPostBranchNumber: '  012  ',
+      })
+      .expect(201);
+    expect(ordersService.createOrder).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        deliveryAddress: 'Toshkent, Chilonzor',
+        btcPostBranchNumber: '012',
+      }),
+      '66666666-6666-4666-8666-666666666666',
+    );
   });
 
   it.each([
@@ -183,7 +207,7 @@ describe('OrdersController (e2e)', () => {
         .post('/api/v1/orders')
         .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
         .set('Idempotency-Key', '66666666-6666-4666-8666-666666666666')
-        .send(payload)
+        .send({ ...delivery, ...payload })
         .expect(400);
       expect(ordersService.createOrder).not.toHaveBeenCalled();
     },
@@ -194,6 +218,7 @@ describe('OrdersController (e2e)', () => {
       .post('/api/v1/orders')
       .set('Authorization', `Bearer ${token(UserRole.CUSTOMER)}`)
       .send({
+        ...delivery,
         items: [{ productId, quantity: 0 }],
         phone: '+998901234567',
         deliveryAddress: 'Address',
@@ -206,17 +231,18 @@ describe('OrdersController (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/v1/orders')
       .set('Authorization', authorization)
-      .send({ items: [] })
+      .send({ ...delivery, items: [] })
       .expect(400);
     await request(app.getHttpServer())
       .post('/api/v1/orders')
       .set('Authorization', authorization)
-      .send({ items: [{ productId, quantity: -1 }] })
+      .send({ ...delivery, items: [{ productId, quantity: -1 }] })
       .expect(400);
     await request(app.getHttpServer())
       .post('/api/v1/orders')
       .set('Authorization', authorization)
       .send({
+        ...delivery,
         items: [{ productId, quantity: 1, price: 1 }],
         totalAmount: 1,
       })

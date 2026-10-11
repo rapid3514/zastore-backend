@@ -18,7 +18,6 @@ import { RolesGuard } from '../../common/guards/roles.guard.js';
 import { UserRole } from '../../generated/prisma/client.js';
 import type { AuthenticatedUser } from '../../common/types/auth-user.type.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
-import { ConfirmOrderDto } from './dto/confirm-order.dto.js';
 import { OrderReasonDto } from './dto/order-reason.dto.js';
 import { QueryOrdersDto } from './dto/query-orders.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
@@ -112,9 +111,8 @@ export class OrdersController {
   confirm(
     @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() input: ConfirmOrderDto,
   ) {
-    return this.ordersService.confirmOrder(id, actor.sub, input);
+    return this.ordersService.confirmOrder(id, actor.sub);
   }
 
   @Patch(':id/reject')

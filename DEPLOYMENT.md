@@ -103,11 +103,10 @@ The history insert and background update share a transaction and a per-account
 advisory lock. `GET /api/v1/appearance/limits` returns the current account's quota
 and `nextAvailableAt`; a sixth change returns 429 with `BACKGROUND_CHANGE_LIMIT`.
 
-`PATCH /api/v1/orders/:id/confirm` accepts `deliveryAddress` (1–255 characters)
-and `btcPostBranchNumber` (1–50 characters). They are normalized and saved in
-the same transaction as confirmation. If omitted, both must already exist on
-the order. Missing or whitespace-only details return 400, including when
-confirmation is requested through the generic status endpoint.
+`POST /api/v1/orders` requires `deliveryAddress` (1–255 characters) and
+`btcPostBranchNumber` (1–50 characters) when a customer submits an order.
+Both fields are normalized before validation and creation. Missing, null,
+whitespace-only, or oversized values return 400.
 
 ```sh
 docker compose --env-file .env.production restart backend caddy

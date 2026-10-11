@@ -57,7 +57,7 @@ describe('Closed-store order DoS regression (real order/work-hours services)', (
     const started = performance.now();
     const timer = new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 10));
     const [order, ...health] = await Promise.all([
-      request(app.getHttpServer()).post('/api/v1/orders').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', '33333333-3333-4333-8333-333333333333').send({ items: [{ productId, quantity: 1 }] }),
+      request(app.getHttpServer()).post('/api/v1/orders').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', '33333333-3333-4333-8333-333333333333').send({ deliveryAddress: 'Address', btcPostBranchNumber: '012', items: [{ productId, quantity: 1 }] }),
       ...Array.from({ length: 5 }, () => request(app.getHttpServer()).get('/api/v1/health')),
     ]);
     expect(order.status).toBe(400);

@@ -15,7 +15,6 @@ import { UsersService } from '../users/users.service.js';
 import { WorkHoursService } from '../work-hours/work-hours.service.js';
 import { ORDER_STATUS_TRANSITIONS } from './constants/order-status-transitions.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
-import type { ConfirmOrderDto } from './dto/confirm-order.dto.js';
 import type { QueryOrdersDto } from './dto/query-orders.dto.js';
 import { OrdersRepository } from './orders.repository.js';
 import { AuditAction, AuditEntityType } from '../../generated/prisma/client.js';
@@ -250,7 +249,7 @@ export class OrdersService {
     return this.toResponse(order);
   }
 
-  async confirmOrder(id: string, actorUserId?: string, input: ConfirmOrderDto = {}) {
+  async confirmOrder(id: string, actorUserId?: string) {
     const current = await this.ordersRepository.findById(id);
     if (!current) throw orderNotFound();
     this.ensureStatusTransition(current.status, OrderStatus.CONFIRMED);
@@ -267,15 +266,6 @@ export class OrdersService {
       });
     }
 
-    const deliveryAddress = (input.deliveryAddress ?? current.deliveryAddress)?.trim().replace(/\s+/g, ' ');
-    const btcPostBranchNumber = (input.btcPostBranchNumber ?? current.btcPostBranchNumber)?.trim().replace(/\s+/g, ' ');
-    if (!deliveryAddress || deliveryAddress.length > 255 || !btcPostBranchNumber || btcPostBranchNumber.length > 50) {
-      throw new BadRequestException({
-        error: 'ORDER_DELIVERY_DETAILS_REQUIRED',
-        message: 'Buyurtmani tasdiqlash uchun manzil va BTC pochta filial raqamini kiriting.',
-      });
-    }
-
     await this.ensureCurrentProductsAvailable(current.items);
 
     if (!(await this.workHoursService.isOpenAt(now))) {
@@ -289,8 +279,6 @@ export class OrdersService {
     const updated = await this.updateStatusAtomically(id, current.status, {
       status: OrderStatus.CONFIRMED,
       confirmedAt: now,
-      deliveryAddress,
-      btcPostBranchNumber,
     });
     if (actorUserId) {
       await this.auditService?.log({
