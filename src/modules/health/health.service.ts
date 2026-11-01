@@ -37,7 +37,7 @@ export class HealthService {
       database,
       redis,
       timestamp,
-      version: 'orders-photo-v2',
+      version: 'v3-order-sizes',
     };
   }
 }

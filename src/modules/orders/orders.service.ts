@@ -86,7 +86,9 @@ export class OrdersService {
       .update(
         JSON.stringify({
           items: [...merged].sort((left, right) =>
-            left.productId.localeCompare(right.productId),
+            `${left.productId}:${left.size ?? ''}`.localeCompare(
+              `${right.productId}:${right.size ?? ''}`,
+            ),
           ),
           phone: dto.phone ?? null,
           deliveryAddress: dto.deliveryAddress ?? null,
@@ -111,11 +113,14 @@ export class OrdersService {
       }
       return this.toResponse(existing);
     }
+    const uniqueProductIds = [
+      ...new Set(merged.map((item) => item.productId)),
+    ];
     const products = await this.ordersRepository.findProductsForOrder(
-      merged.map((item) => item.productId),
+      uniqueProductIds,
     );
 
-    if (products.length !== merged.length) {
+    if (products.length !== uniqueProductIds.length) {
       throw productMissing();
     }
 
@@ -134,9 +139,13 @@ export class OrdersService {
         item.quantity,
       );
       this.ensureValidAmount(lineTotal);
+      const trimmedSize = item.size?.trim();
+      const productName = trimmedSize
+        ? `${product.name} (${trimmedSize})`
+        : product.name;
       return {
         productId: item.productId,
-        productName: product.name,
+        productName,
         unitPrice: product.price,
         quantity: item.quantity,
         lineTotal,
@@ -403,15 +412,17 @@ export class OrdersService {
         message: `Order must contain between 1 and ${MAX_ORDER_ITEMS} items`,
       });
     }
-    const map = new Map<string, { productId: string; quantity: number }>();
+    const map = new Map<string, CreateOrderItemDto>();
     for (const item of items) {
       this.ensureValidQuantity(item.quantity);
-      const existing = map.get(item.productId);
+      const sizeKey = item.size?.trim().toUpperCase() ?? '';
+      const key = `${item.productId}:${sizeKey}`;
+      const existing = map.get(key);
       if (existing) {
         existing.quantity += item.quantity;
         this.ensureValidQuantity(existing.quantity);
       } else {
-        map.set(item.productId, { ...item });
+        map.set(key, { ...item, size: item.size?.trim() });
       }
     }
     return [...map.values()];

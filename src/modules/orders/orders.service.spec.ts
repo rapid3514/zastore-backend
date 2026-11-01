@@ -259,6 +259,53 @@ describe('OrdersService', () => {
     );
   });
 
+  it('formats productName with selected size in order item', async () => {
+    usersService.findById.mockResolvedValue({
+      id: userId,
+      phone: '+998901234567',
+      isBlocked: false,
+    });
+    repository.findProductsForOrder.mockResolvedValue([product()]);
+    workHoursService.calculateBusinessDeadline.mockResolvedValue(
+      new Date('2026-09-29T13:00:00.000Z'),
+    );
+    repository.createOrder.mockResolvedValue(
+      order({
+        items: [
+          {
+            ...order().items[0],
+            productName: 'Burger (XL)',
+            quantity: 1,
+            lineTotal: new Prisma.Decimal('12.50'),
+          },
+        ],
+        subtotal: new Prisma.Decimal('12.50'),
+        total: new Prisma.Decimal('12.50'),
+      }),
+    );
+
+    await service.createOrder(
+      { sub: userId },
+      {
+        ...delivery,
+        items: [{ productId, quantity: 1, size: 'XL' }],
+      },
+      idempotencyKey,
+    );
+
+    expect(repository.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            productId,
+            productName: 'Burger (XL)',
+            quantity: 1,
+          }),
+        ],
+      }),
+    );
+  });
+
   it('returns the created order without waiting for Telegram delivery', async () => {
     usersService.findById.mockResolvedValue({
       id: userId,
