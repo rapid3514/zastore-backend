@@ -20,6 +20,7 @@ export const envSchema = z.object({
   TRUST_PROXY_CIDRS: z.string().default(''),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(2).default(0),
   RENDER_EXTERNAL_HOSTNAME: optionalString,
+  KOYEB_PUBLIC_DOMAIN: optionalString,
   REQUEST_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).max(1024 * 1024).default(65_536),
   DATABASE_URL: z.url().startsWith('postgresql://'),
   REDIS_URL: z.preprocess((value) => value === '' ? undefined : value, z.url().regex(/^rediss?:\/\//).optional()),
@@ -79,7 +80,7 @@ export const envSchema = z.object({
     if (environment.NODE_ENV === 'production' && (url.protocol !== 'https:' || isUntrustedProductionHost(url.hostname))) issue('CORS_ALLOWED_ORIGINS', 'must contain real HTTPS production origins');
   }
   if (environment.NODE_ENV !== 'production') return;
-  for (const key of ['APP_PUBLIC_URL', 'MINI_APP_URL', 'REDIS_URL', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'IMAGEKIT_PRIVATE_KEY', 'IMAGEKIT_PUBLIC_KEY', 'IMAGEKIT_URL_ENDPOINT', 'TELEGRAM_CHANNEL_ID', 'TELEGRAM_BOT_USERNAME'] as const) {
+  for (const key of ['APP_PUBLIC_URL', 'MINI_APP_URL', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'IMAGEKIT_PRIVATE_KEY', 'IMAGEKIT_PUBLIC_KEY', 'IMAGEKIT_URL_ENDPOINT', 'TELEGRAM_CHANNEL_ID', 'TELEGRAM_BOT_USERNAME'] as const) {
     if (!environment[key]) issue(key, 'is required in production');
   }
   for (const key of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'TELEGRAM_WEBHOOK_SECRET'] as const) {
@@ -106,6 +107,9 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   const normalized = { ...config };
   if (!normalized.APP_PUBLIC_URL && typeof normalized.RENDER_EXTERNAL_HOSTNAME === 'string' && normalized.RENDER_EXTERNAL_HOSTNAME.trim()) {
     normalized.APP_PUBLIC_URL = `https://${normalized.RENDER_EXTERNAL_HOSTNAME.trim()}`;
+  }
+  if (!normalized.APP_PUBLIC_URL && typeof normalized.KOYEB_PUBLIC_DOMAIN === 'string' && normalized.KOYEB_PUBLIC_DOMAIN.trim()) {
+    normalized.APP_PUBLIC_URL = `https://${normalized.KOYEB_PUBLIC_DOMAIN.trim().replace(/^https?:\/\//, '')}`;
   }
   const parsed = envSchema.safeParse(normalized);
   if (!parsed.success) throw new Error(`Invalid environment configuration: ${parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`);

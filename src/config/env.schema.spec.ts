@@ -7,7 +7,7 @@ describe('canonical environment validation', () => {
   it('validates a complete production environment and bounded media defaults', () => {
     expect(validateEnvironment(productionEnvironment)).toMatchObject({ NODE_ENV: 'production', MEDIA_MAX_IMAGE_BYTES: 5 * 1024 * 1024, MEDIA_MAX_VIDEO_BYTES: 150 * 1024 * 1024 });
   });
-  it.each(['APP_PUBLIC_URL', 'MINI_APP_URL', 'REDIS_URL', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'IMAGEKIT_PRIVATE_KEY', 'IMAGEKIT_PUBLIC_KEY', 'IMAGEKIT_URL_ENDPOINT', 'TELEGRAM_CHANNEL_ID', 'TELEGRAM_BOT_USERNAME', 'TELEGRAM_MINI_APP_SHORT_NAME'] as const)('requires %s in production', (key) => {
+  it.each(['APP_PUBLIC_URL', 'MINI_APP_URL', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'IMAGEKIT_PRIVATE_KEY', 'IMAGEKIT_PUBLIC_KEY', 'IMAGEKIT_URL_ENDPOINT', 'TELEGRAM_CHANNEL_ID', 'TELEGRAM_BOT_USERNAME', 'TELEGRAM_MINI_APP_SHORT_NAME'] as const)('requires %s in production', (key) => {
     expect(() => validateEnvironment({ ...productionEnvironment, [key]: undefined })).toThrow(key);
   });
   it('allows missing provider settings in tests', () => {
