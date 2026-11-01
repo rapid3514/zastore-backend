@@ -37,7 +37,7 @@ export class HealthService {
       database,
       redis,
       timestamp,
-      version: 'v4-customer-chat',
+      version: 'v5-supabase-db',
     };
   }
 }

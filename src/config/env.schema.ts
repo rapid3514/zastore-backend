@@ -111,6 +111,13 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   if (!normalized.APP_PUBLIC_URL && typeof normalized.KOYEB_PUBLIC_DOMAIN === 'string' && normalized.KOYEB_PUBLIC_DOMAIN.trim()) {
     normalized.APP_PUBLIC_URL = `https://${normalized.KOYEB_PUBLIC_DOMAIN.trim().replace(/^https?:\/\//, '')}`;
   }
+  const SUPABASE_DB_URL = 'postgresql://zastore_app.rnloubosxkqbcwtuxllf:ZaStore_Db_2026_SecurePass99@aws-1-eu-central-1.pooler.supabase.com:5432/postgres';
+  if (
+    typeof normalized.DATABASE_URL === 'string' &&
+    (normalized.DATABASE_URL.includes('render.com') || normalized.DATABASE_URL.includes('dpg-'))
+  ) {
+    normalized.DATABASE_URL = SUPABASE_DB_URL;
+  }
   const parsed = envSchema.safeParse(normalized);
   if (!parsed.success) throw new Error(`Invalid environment configuration: ${parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`);
   return parsed.data;
