@@ -176,4 +176,66 @@ describe('TelegramService notifications', () => {
       TelegramDeliveryError,
     );
   });
+
+  it('sends new order notification with sendPhoto when product image is available', async () => {
+    postTelegramMock.mockResolvedValueOnce({
+      statusCode: 200,
+      payload: { ok: true, result: { message_id: 88 } },
+    });
+
+    await service.sendNewOrderNotification('admin-chat-1', {
+      id: 'order-uuid-1234',
+      total: '450000',
+      createdAt: new Date('2026-11-01T12:00:00Z'),
+      phone: '+998901112233',
+      deliveryAddress: 'Toshkent sh., Chilonzor 5',
+      user: { firstName: 'Zilola', lastName: 'Karimova' },
+      items: [
+        {
+          productName: 'Ipak Ko‘ylak (S)',
+          quantity: 1,
+          product: { imageUrl: 'https://cdn.example/dress.jpg' },
+        },
+      ],
+    });
+
+    expect(postTelegramMock).toHaveBeenCalledWith(
+      'token-from-env',
+      'sendPhoto',
+      expect.objectContaining({
+        chat_id: 'admin-chat-1',
+        photo: 'https://cdn.example/dress.jpg',
+        caption: expect.stringContaining('Ipak Ko‘ylak (S)'),
+        parse_mode: 'HTML',
+      }),
+    );
+  });
+
+  it('sends new order notification with sendMessage and lists multiple products when no image is available', async () => {
+    postTelegramMock.mockResolvedValueOnce({
+      statusCode: 200,
+      payload: { ok: true, result: { message_id: 89 } },
+    });
+
+    await service.sendNewOrderNotification('admin-chat-2', {
+      id: 'order-uuid-5678',
+      total: '700000',
+      createdAt: new Date('2026-11-01T14:30:00Z'),
+      user: { firstName: 'Jasur' },
+      items: [
+        { productName: 'Poyabzal', quantity: 1, product: null },
+        { productName: 'Kamarga', quantity: 2, product: null },
+      ],
+    });
+
+    expect(postTelegramMock).toHaveBeenCalledWith(
+      'token-from-env',
+      'sendMessage',
+      expect.objectContaining({
+        chat_id: 'admin-chat-2',
+        text: expect.stringContaining('Poyabzal (1 dona)'),
+        parse_mode: 'HTML',
+      }),
+    );
+  });
 });

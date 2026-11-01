@@ -3,9 +3,23 @@ import { OrderStatus } from '../../generated/prisma/client.js';
 import { TelegramService } from '../telegram/telegram.service.js';
 import { NotificationsRepository } from './notifications.repository.js';
 
+export interface NotificationOrderItem {
+  productName: string;
+  quantity: number;
+  unitPrice?: { toString(): string } | string | number;
+  lineTotal?: { toString(): string } | string | number;
+  product?: {
+    imageUrl?: string | null;
+    imageFileId?: string | null;
+    media?: Array<{ url: string; fileId?: string }>;
+  } | null;
+}
+
 export interface NotificationOrder {
   id: string;
   status: OrderStatus;
+  phone?: string | null;
+  deliveryAddress?: string | null;
   btcPostBranchNumber?: string | null;
   total: { toString(): string } | string | number;
   createdAt: Date;
@@ -13,7 +27,9 @@ export interface NotificationOrder {
     telegramId: bigint;
     firstName: string;
     lastName?: string | null;
+    phone?: string | null;
   };
+  items?: NotificationOrderItem[];
 }
 
 @Injectable()

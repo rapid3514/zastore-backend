@@ -49,6 +49,34 @@ export interface TelegramMediaInput {
   parse_mode?: 'HTML';
 }
 
+function escapeHtml(text?: string | null): string {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function formatNotificationMoney(
+  amount: { toString(): string } | string | number,
+): string {
+  const raw =
+    typeof amount === 'object' && amount !== null && 'toString' in amount
+      ? amount.toString()
+      : String(amount);
+  const parsed = Number(raw);
+  if (!Number.isNaN(parsed)) {
+    return `${Math.round(parsed).toLocaleString('uz-UZ')} so'm`;
+  }
+  return `${raw} so'm`;
+}
+
+function formatNotificationDate(date: Date | string): string {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return String(date);
+  return d.toISOString().replace('T', ' ').slice(0, 19);
+}
+
 @Injectable()
 export class TelegramService {
   private readonly logger = new Logger(TelegramService.name);
@@ -128,29 +156,91 @@ export class TelegramService {
       id: string;
       total: { toString(): string } | string | number;
       createdAt: Date;
+      phone?: string | null;
+      deliveryAddress?: string | null;
       btcPostBranchNumber?: string | null;
-      user: { firstName: string; lastName?: string | null };
+      user: { firstName: string; lastName?: string | null; phone?: string | null };
+      items?: Array<{
+        productName: string;
+        quantity: number;
+        unitPrice?: { toString(): string } | string | number;
+        lineTotal?: { toString(): string } | string | number;
+        product?: {
+          imageUrl?: string | null;
+          imageFileId?: string | null;
+          media?: Array<{ url: string; fileId?: string }>;
+        } | null;
+      }>;
     },
   ): Promise<void> {
     const customer = [order.user.firstName, order.user.lastName]
       .filter(Boolean)
       .join(' ');
-    await this.sendMessage(
-      chatId,
-      [
-        '🛍 Yangi buyurtma',
-        '',
-        `Buyurtma: #${order.id}`,
-        `Mijoz: ${customer}`,
-        ...(order.btcPostBranchNumber
-          ? [`BTC pochta filiali: ${order.btcPostBranchNumber}`]
-          : []),
-        `Summa: ${order.total.toString()}`,
-        `Vaqt: ${order.createdAt.toISOString()}`,
-        '',
-        'Admin panelni tekshiring.',
-      ].join('\n'),
-    );
+    const phone = order.phone || order.user.phone;
+    const items = order.items ?? [];
+
+    const productLines: string[] = [];
+    if (items.length === 1) {
+      productLines.push(
+        `📦 <b>Mahsulot:</b> ${escapeHtml(items[0].productName)} (${items[0].quantity} dona)`,
+      );
+    } else if (items.length > 1) {
+      productLines.push('📦 <b>Mahsulotlar:</b>');
+      for (const item of items) {
+        productLines.push(
+          `• ${escapeHtml(item.productName)} (${item.quantity} dona)`,
+        );
+      }
+    } else {
+      productLines.push(`Buyurtma: #${escapeHtml(order.id)}`);
+    }
+
+    const lines = [
+      '🛍 <b>Yangi buyurtma!</b>',
+      '',
+      ...productLines,
+      `👤 <b>Mijoz:</b> ${escapeHtml(customer)}`,
+      ...(phone ? [`📞 <b>Telefon:</b> ${escapeHtml(phone)}`] : []),
+      ...(order.deliveryAddress
+        ? [`📍 <b>Manzil:</b> ${escapeHtml(order.deliveryAddress)}`]
+        : []),
+      ...(order.btcPostBranchNumber
+        ? [`📮 <b>BTC pochta filiali:</b> ${escapeHtml(order.btcPostBranchNumber)}`]
+        : []),
+      `💰 <b>Summa:</b> ${escapeHtml(formatNotificationMoney(order.total))}`,
+      `⏰ <b>Vaqt:</b> ${escapeHtml(formatNotificationDate(order.createdAt))}`,
+      '',
+      '<i>Admin panelni tekshiring.</i>',
+    ];
+    const messageText = lines.join('\n');
+
+    let photo: string | undefined;
+    for (const item of items) {
+      const p = item.product;
+      if (!p) continue;
+      const candidate =
+        p.imageUrl ||
+        p.media?.[0]?.url ||
+        p.imageFileId ||
+        p.media?.[0]?.fileId;
+      if (candidate) {
+        photo = candidate;
+        break;
+      }
+    }
+
+    if (photo) {
+      try {
+        await this.sendPhoto(chatId, photo, messageText);
+        return;
+      } catch (error) {
+        this.logger.warn(
+          `Could not send order photo to admin (${chatId}): ${error instanceof Error ? error.message : String(error)}. Falling back to text message.`,
+        );
+      }
+    }
+
+    await this.sendMessage(chatId, messageText, undefined, 'HTML');
   }
 
   async sendOrderRejectedNotification(
@@ -301,11 +391,13 @@ export class TelegramService {
     chatId: number | string,
     text: string,
     replyMarkup?: Record<string, unknown>,
+    parseMode?: 'HTML' | 'MarkdownV2',
   ): Promise<number> {
     const message = await this.callTelegram<TelegramMessage>('sendMessage', {
       chat_id: chatId,
       text,
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+      ...(parseMode ? { parse_mode: parseMode } : {}),
     });
     if (!message || !Number.isSafeInteger(message.message_id)) {
       throw new TelegramDeliveryError('uncertain', 'TELEGRAM_INVALID_RESPONSE');

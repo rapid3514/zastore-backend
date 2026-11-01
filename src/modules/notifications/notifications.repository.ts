@@ -50,7 +50,29 @@ export class NotificationsRepository {
           order: {
             include: {
               user: {
-                select: { telegramId: true, firstName: true, lastName: true },
+                select: {
+                  telegramId: true,
+                  firstName: true,
+                  lastName: true,
+                  phone: true,
+                },
+              },
+              items: {
+                orderBy: { createdAt: 'asc' },
+                include: {
+                  product: {
+                    select: {
+                      imageUrl: true,
+                      imageFileId: true,
+                      media: {
+                        where: { type: 'IMAGE' },
+                        orderBy: { position: 'asc' },
+                        take: 1,
+                        select: { url: true, fileId: true },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
