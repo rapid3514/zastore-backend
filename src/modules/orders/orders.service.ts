@@ -20,6 +20,7 @@ import type { QueryOrdersDto } from './dto/query-orders.dto.js';
 import { OrdersRepository } from './orders.repository.js';
 import { AuditAction, AuditEntityType } from '../../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
+import { postTelegram } from '../telegram/telegram-api.js';
 import {
   MAX_ORDER_AMOUNT,
   MAX_ORDER_ITEMS,
@@ -271,7 +272,97 @@ export class OrdersService {
   async getManageOrder(id: string) {
     const order = await this.ordersRepository.findById(id);
     if (!order) throw orderNotFound();
+    await this.trySyncCustomerUsername(order.user);
     return this.toResponse(order);
+  }
+
+  async openCustomerChat(
+    id: string,
+    actor: { sub: string; telegramId?: string },
+  ) {
+    const order = await this.ordersRepository.findById(id);
+    if (!order) throw orderNotFound();
+    await this.trySyncCustomerUsername(order.user);
+
+    const cleanUsername = order.user.username?.trim().replace(/^@/, '') || null;
+    const customerTelegramId = order.user.telegramId.toString();
+    const customerPhone = order.user.phone || order.phone || null;
+    const customerName =
+      [order.user.firstName, order.user.lastName].filter(Boolean).join(' ') ||
+      'Mijoz';
+
+    const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    if (botToken && actor.telegramId && !cleanUsername) {
+      try {
+        if (customerPhone) {
+          await postTelegram(botToken, 'sendContact', {
+            chat_id: actor.telegramId,
+            phone_number: customerPhone,
+            first_name: order.user.firstName || 'Mijoz',
+            ...(order.user.lastName ? { last_name: order.user.lastName } : {}),
+          });
+        }
+        await postTelegram(botToken, 'sendMessage', {
+          chat_id: actor.telegramId,
+          text: `💬 <b>Mijoz bilan muloqot:</b> <a href="tg://user?id=${customerTelegramId}">${customerName}</a>\n📞 Telefon: ${customerPhone ?? '—'}`,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: `💬 ${customerName} bilan yozishish`,
+                  url: `tg://user?id=${customerTelegramId}`,
+                },
+              ],
+            ],
+          },
+        });
+      } catch {
+        // Non-blocking fallback
+      }
+    }
+
+    return {
+      username: cleanUsername,
+      telegramId: customerTelegramId,
+      phone: customerPhone,
+      telegramUrl: cleanUsername
+        ? `https://t.me/${cleanUsername}`
+        : customerPhone
+          ? `https://t.me/+${customerPhone.replace(/\D/g, '')}`
+          : null,
+    };
+  }
+
+  private async trySyncCustomerUsername(user: {
+    id: string;
+    username?: string | null;
+    telegramId: bigint;
+  }) {
+    if (user.username) return;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    if (!botToken) return;
+    try {
+      const { statusCode, payload } = await postTelegram<{ username?: string }>(
+        botToken,
+        'getChat',
+        { chat_id: user.telegramId.toString() },
+      );
+      if (
+        statusCode >= 200 &&
+        statusCode < 300 &&
+        payload.ok &&
+        payload.result?.username
+      ) {
+        user.username = payload.result.username;
+        await this.ordersRepository.updateUserUsername(
+          user.id,
+          payload.result.username,
+        );
+      }
+    } catch {
+      // Ignore if Telegram API is unreachable
+    }
   }
 
   async confirmOrder(id: string, actorUserId?: string) {

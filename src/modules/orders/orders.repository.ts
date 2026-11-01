@@ -86,6 +86,13 @@ export class OrdersRepository {
     });
   }
 
+  updateUserUsername(userId: string, username: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { username },
+    });
+  }
+
   async findUserOrders(userId: string, query: QueryOrdersDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;

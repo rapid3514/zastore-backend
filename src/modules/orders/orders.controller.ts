@@ -117,6 +117,16 @@ export class OrdersController {
     return this.ordersService.getManageOrder(id);
   }
 
+  @Post(':id/customer-chat')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  openCustomerChat(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.ordersService.openCustomerChat(id, actor);
+  }
+
   @Patch(':id/confirm')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
