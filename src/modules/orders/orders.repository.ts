@@ -78,6 +78,14 @@ export class OrdersRepository {
     });
   }
 
+  updatePhone(id: string, phone: string) {
+    return this.prisma.order.update({
+      where: { id },
+      data: { phone },
+      include: orderInclude,
+    });
+  }
+
   async findUserOrders(userId: string, query: QueryOrdersDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;

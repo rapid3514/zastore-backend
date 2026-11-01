@@ -20,6 +20,7 @@ import type { AuthenticatedUser } from '../../common/types/auth-user.type.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderReasonDto } from './dto/order-reason.dto.js';
 import { QueryOrdersDto } from './dto/query-orders.dto.js';
+import { UpdateOrderPhoneDto } from './dto/update-order-phone.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { OrdersService } from './orders.service.js';
 
@@ -82,6 +83,17 @@ export class OrdersController {
     @Body() input: OrderReasonDto,
   ) {
     return this.ordersService.cancelMyOrder(actor, id, input.reason);
+  }
+
+  @Patch(':id/phone')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  updatePhone(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: UpdateOrderPhoneDto,
+  ) {
+    return this.ordersService.updateOrderPhone(actor, id, input.phone);
   }
 
   @Get('manage')

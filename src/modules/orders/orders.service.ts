@@ -10,6 +10,7 @@ import {
   OrderStatus,
   Prisma,
   ProductAvailabilityStatus,
+  UserRole,
 } from '../../generated/prisma/client.js';
 import { UsersService } from '../users/users.service.js';
 import { WorkHoursService } from '../work-hours/work-hours.service.js';
@@ -212,6 +213,21 @@ export class OrdersService {
     return this.toResponse(order);
   }
 
+  async updateOrderPhone(
+    actor: { sub: string; role?: UserRole },
+    id: string,
+    phone: string,
+  ) {
+    const isAdmin =
+      actor.role === UserRole.ADMIN || actor.role === UserRole.SUPER_ADMIN;
+    const order = isAdmin
+      ? await this.ordersRepository.findById(id)
+      : await this.ordersRepository.findUserOrderById(actor.sub, id);
+    if (!order) throw orderNotFound();
+    const updated = await this.ordersRepository.updatePhone(id, phone);
+    return this.toResponse(updated);
+  }
+
   async getManageOrders(query: QueryOrdersDto) {
     this.ensureValidDateRange(query);
     const { data, total } = await this.ordersRepository.findManageOrders(query);
@@ -400,7 +416,7 @@ export class OrdersService {
   }
 
   private mergeDuplicateItems(
-    items: { productId: string; quantity: number }[],
+    items: Array<{ productId: string; quantity: number; size?: string }>,
   ) {
     if (
       !Array.isArray(items) ||
@@ -412,7 +428,10 @@ export class OrdersService {
         message: `Order must contain between 1 and ${MAX_ORDER_ITEMS} items`,
       });
     }
-    const map = new Map<string, CreateOrderItemDto>();
+    const map = new Map<
+      string,
+      { productId: string; quantity: number; size?: string }
+    >();
     for (const item of items) {
       this.ensureValidQuantity(item.quantity);
       const sizeKey = item.size?.trim().toUpperCase() ?? '';
@@ -598,6 +617,9 @@ export class OrdersService {
         lastName: order.user.lastName,
         username: order.user.username,
         phone: order.user.phone,
+        telegramId: order.user.telegramId
+          ? order.user.telegramId.toString()
+          : null,
       },
       items: order.items.map((item) => ({
         id: item.id,
