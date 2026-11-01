@@ -192,7 +192,7 @@ export class TelegramService {
         );
       }
     } else {
-      productLines.push(`Buyurtma: #${escapeHtml(order.id)}`);
+      productLines.push('📦 <b>Mahsulot:</b> Yangi buyurtma');
     }
 
     const lines = [
@@ -219,10 +219,12 @@ export class TelegramService {
       const p = item.product;
       if (!p) continue;
       const candidate =
-        p.imageUrl ||
-        p.media?.[0]?.url ||
         p.imageFileId ||
-        p.media?.[0]?.fileId;
+        p.imageUrl ||
+        p.media?.find((m) => Boolean(m.fileId))?.fileId ||
+        p.media?.find((m) => Boolean(m.url))?.url ||
+        p.media?.[0]?.fileId ||
+        p.media?.[0]?.url;
       if (candidate) {
         photo = candidate;
         break;

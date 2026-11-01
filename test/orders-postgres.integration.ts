@@ -1,4 +1,9 @@
 import { ConfigService } from '@nestjs/config';
+import { ValidationPipe } from '@nestjs/common';
+import { JwtModule, JwtService } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
 import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaService } from '../src/database/prisma.service.js';
@@ -12,6 +17,15 @@ import { NotificationsRepository } from '../src/modules/notifications/notificati
 import { OrdersRepository } from '../src/modules/orders/orders.repository.js';
 import { PaymentsRepository } from '../src/modules/payments/payments.repository.js';
 import { createConfigService } from './helpers/config.js';
+import { JwtAuthGuard } from '../src/common/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../src/common/guards/roles.guard.js';
+import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy.js';
+import { OrdersController } from '../src/modules/orders/orders.controller.js';
+import { OrdersService } from '../src/modules/orders/orders.service.js';
+import { UsersService } from '../src/modules/users/users.service.js';
+import { WorkHoursService } from '../src/modules/work-hours/work-hours.service.js';
+import { AuditService } from '../src/modules/audit/audit.service.js';
+import { testConfiguration } from './helpers/config.js';
 
 describe('checkout concurrency with real PostgreSQL', () => {
   let prisma: PrismaService;
@@ -102,6 +116,53 @@ describe('checkout concurrency with real PostgreSQL', () => {
     await expect(checkout(customerId, key, 'a'.repeat(64))).rejects.toMatchObject({ status: 409 });
     const otherUser = await checkout(secondCustomerId, key);
     expect(otherUser.id).not.toBe(first.id);
+  });
+
+  it('handles 20 simultaneous authenticated checkout HTTP retries with one order and one notification', async () => {
+    await seed();
+    const moduleRef = await Test.createTestingModule({
+      imports: [PassportModule.register({ defaultStrategy: 'jwt' }), JwtModule.register({})],
+      controllers: [OrdersController],
+      providers: [
+        OrdersService, JwtStrategy, JwtAuthGuard, RolesGuard,
+        { provide: ConfigService, useValue: createConfigService() },
+        { provide: OrdersRepository, useValue: orders },
+        { provide: UsersService, useValue: { findById: (id: string) => prisma.user.findUnique({ where: { id } }) } },
+        { provide: WorkHoursService, useValue: {
+          isOpenAt: async () => true,
+          calculateBusinessDeadline: async () => new Date(Date.now() + 3_600_000),
+        } },
+        { provide: AuditService, useValue: { log: async () => undefined } },
+      ],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api/v1');
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    await app.listen(0, '127.0.0.1');
+    try {
+      const auth = testConfiguration().auth;
+      const token = moduleRef.get(JwtService).sign(
+        { sub: customerId, telegramId: '123', role: UserRole.CUSTOMER, type: 'access' },
+        { secret: auth.accessSecret, issuer: auth.issuer, audience: auth.audience, algorithm: 'HS256', expiresIn: '5m' },
+      );
+      const key = randomUUID();
+      const body = { items: [{ productId, quantity: 1 }], deliveryAddress: 'Toshkent, Chilonzor', btcPostBranchNumber: '012' };
+      const submit = (payload = body) => request(app.getHttpServer()).post('/api/v1/orders')
+        .set('Authorization', `Bearer ${token}`).set('Idempotency-Key', key).send(payload);
+      const responses = await Promise.all(Array.from({ length: 20 }, () => submit()));
+      for (const response of responses) expect(response.status).toBe(201);
+      const ids = new Set(responses.map((response) => response.body.id));
+      expect(ids.size).toBe(1);
+      expect(await prisma.order.count({ where: { userId: customerId } })).toBe(1);
+      const stored = await prisma.order.findUniqueOrThrow({ where: { id: responses[0].body.id } });
+      expect(stored.deliveryAddress).toBe(body.deliveryAddress);
+      expect(stored.btcPostBranchNumber).toBe('012');
+      expect(await prisma.notificationOutbox.count({ where: { orderId: stored.id } })).toBe(1);
+      await submit({ ...body, items: [{ productId, quantity: 2 }] }).expect(409);
+      expect(await prisma.order.count({ where: { userId: customerId } })).toBe(1);
+    } finally {
+      await app.close();
+    }
   });
 
   it('rejects cancelled and expired payments and serializes concurrent payment creation', async () => {

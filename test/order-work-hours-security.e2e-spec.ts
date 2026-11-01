@@ -7,6 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { JwtAuthGuard } from '../src/common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../src/common/guards/roles.guard.js';
+import { RateLimitStorage } from '../src/common/security/rate-limit.storage.js';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { Prisma, ProductAvailabilityStatus, UserRole, WeekDay } from '../src/generated/prisma/client.js';
 import { AuditService } from '../src/modules/audit/audit.service.js';
@@ -36,6 +37,7 @@ describe('Closed-store order DoS regression (real order/work-hours services)', (
       providers: [
         OrdersService, WorkHoursService, HealthService, JwtStrategy, JwtAuthGuard, RolesGuard,
         { provide: ConfigService, useValue: createConfigService() },
+        { provide: RateLimitStorage, useValue: { ping: vi.fn().mockResolvedValue(undefined) } },
         { provide: PrismaService, useValue: { $queryRaw: vi.fn().mockResolvedValue([{ value: 1 }]) } },
         { provide: UsersService, useValue: { findById: vi.fn().mockResolvedValue({ id: userId, telegramId: 123n, role: UserRole.CUSTOMER, isBlocked: false }) } },
         { provide: OrdersRepository, useValue: { findByIdempotencyKey: vi.fn().mockResolvedValue(null), findProductsForOrder: vi.fn().mockResolvedValue([{ id: productId, name: 'Product', price: new Prisma.Decimal('10.00'), isActive: true, availabilityStatus: ProductAvailabilityStatus.IN_STOCK, category: { isActive: true } }]), createOrder } },

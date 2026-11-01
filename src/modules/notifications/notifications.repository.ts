@@ -65,9 +65,8 @@ export class NotificationsRepository {
                       imageUrl: true,
                       imageFileId: true,
                       media: {
-                        where: { type: 'IMAGE' },
                         orderBy: { position: 'asc' },
-                        take: 1,
+                        take: 3,
                         select: { url: true, fileId: true },
                       },
                     },

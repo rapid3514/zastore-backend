@@ -32,6 +32,12 @@ export class HealthService {
         timestamp,
       });
     }
-    return { status: 'ok' as const, database, redis, timestamp };
+    return {
+      status: 'ok' as const,
+      database,
+      redis,
+      timestamp,
+      version: 'orders-photo-v2',
+    };
   }
 }
